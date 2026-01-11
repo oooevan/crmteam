@@ -2,8 +2,11 @@
 -- Выполни этот SQL в SQL Editor в Supabase Dashboard
 
 -- Создание таблицы reports
+-- ВАЖНО: Если таблица уже создана с UUID, нужно изменить тип колонки:
+-- ALTER TABLE reports ALTER COLUMN id TYPE TEXT;
+-- Затем установить значение: UPDATE reports SET id = 'main-reports' WHERE id IS NOT NULL LIMIT 1;
 CREATE TABLE IF NOT EXISTS reports (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id TEXT PRIMARY KEY,
   data JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

@@ -222,13 +222,13 @@ export const subscribeToDataChanges = (
   }
 
   console.log('🔔 Подписка на изменения данных в реальном времени...');
+  console.log('🔍 ID записи для подписки:', REPORTS_ID);
+
+  const channelName = `reports-${REPORTS_ID}`;
+  console.log('📡 Имя канала:', channelName);
 
   const channel = supabase
-    .channel(`reports-${REPORTS_ID}`, {
-      config: {
-        broadcast: { self: false }, // Не отправлять события обратно отправителю
-      },
-    })
+    .channel(channelName)
     .on(
       'postgres_changes',
       {
@@ -238,7 +238,8 @@ export const subscribeToDataChanges = (
         filter: `id=eq.${REPORTS_ID}`
       },
       (payload) => {
-        console.log('📡 Получено обновление из Supabase:', payload.eventType, payload);
+        console.log('📡 Получено обновление из Supabase:', payload.eventType);
+        console.log('📦 Полный payload:', JSON.stringify(payload, null, 2));
         
         if (payload.eventType === 'UPDATE' && payload.new && (payload.new as any).data) {
           const newData = (payload.new as any).data as AppData;
@@ -251,10 +252,13 @@ export const subscribeToDataChanges = (
           callback(newData);
         } else {
           console.warn('⚠️ Неожиданный формат payload:', payload);
+          console.warn('⚠️ eventType:', payload.eventType);
+          console.warn('⚠️ payload.new:', payload.new);
         }
       }
     )
     .subscribe((status, err) => {
+      console.log('📊 Статус подписки:', status);
       if (status === 'SUBSCRIBED') {
         console.log('✅ Подписка на изменения активна');
       } else if (status === 'CHANNEL_ERROR') {
@@ -264,7 +268,7 @@ export const subscribeToDataChanges = (
       } else if (status === 'CLOSED') {
         console.warn('⚠️ Канал подписки закрыт');
       } else {
-        console.log('ℹ️ Статус подписки:', status);
+        console.log('ℹ️ Статус подписки:', status, err ? `Ошибка: ${err}` : '');
       }
     });
 
