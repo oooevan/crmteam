@@ -205,6 +205,8 @@ export const saveData = async (data: AppData): Promise<void> => {
       throw error;
     }
     console.log('✅ Данные успешно сохранены в Supabase');
+    console.log('💾 Сохранено пользователей:', Object.keys(data).length);
+    console.log('🔔 Событие должно быть отправлено через Realtime...');
   } catch (error) {
     console.error('❌ Ошибка при сохранении в Supabase:', error);
     throw error;
@@ -224,8 +226,9 @@ export const subscribeToDataChanges = (
   console.log('🔔 Подписка на изменения данных в реальном времени...');
   console.log('🔍 ID записи для подписки:', REPORTS_ID);
 
-  const channelName = `reports-${REPORTS_ID}`;
+  const channelName = `reports-${Date.now()}`; // Уникальное имя канала для каждой подписки
   console.log('📡 Имя канала:', channelName);
+  console.log('📡 Фильтр подписки:', `id=eq.${REPORTS_ID}`);
 
   const channel = supabase
     .channel(channelName)
@@ -261,20 +264,25 @@ export const subscribeToDataChanges = (
       console.log('📊 Статус подписки:', status);
       if (status === 'SUBSCRIBED') {
         console.log('✅ Подписка на изменения активна');
+        console.log('✅ Канал:', channelName, 'подключен');
       } else if (status === 'CHANNEL_ERROR') {
         console.error('❌ Ошибка подписки на изменения:', err);
       } else if (status === 'TIMED_OUT') {
         console.error('❌ Таймаут при подписке на изменения');
       } else if (status === 'CLOSED') {
-        console.warn('⚠️ Канал подписки закрыт');
+        console.warn('⚠️ Канал подписки закрыт:', channelName);
       } else {
         console.log('ℹ️ Статус подписки:', status, err ? `Ошибка: ${err}` : '');
       }
     });
 
+  console.log('🔔 Подписка создана, ожидание подключения...');
+
   // Возвращаем функцию для отписки
   return () => {
-    console.log('🔕 Отписка от изменений данных');
-    supabase.removeChannel(channel);
+    console.log('🔕 Отписка от изменений данных, канал:', channelName);
+    supabase.removeChannel(channel).then(() => {
+      console.log('✅ Канал удален:', channelName);
+    });
   };
 };
