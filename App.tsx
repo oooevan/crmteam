@@ -646,16 +646,21 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<{ role: Role; name?: string } | null>(null);
   const [currentWeekId, setCurrentWeekId] = useState(WEEKS_LIST[0].id);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false); // Флаг для предотвращения циклических обновлений
 
   // Загрузка данных при монтировании компонента
   useEffect(() => {
     const loadData = async () => {
       try {
         setIsLoading(true);
+        console.log('📥 Загрузка данных из Supabase...');
         const initialData = await getInitialData();
         setData(initialData);
+        console.log('✅ Данные успешно загружены из Supabase');
       } catch (error) {
-        console.error('Ошибка при загрузке данных:', error);
+        console.error('❌ Ошибка при загрузке данных:', error);
+        // При ошибке показываем сообщение пользователю
+        alert('Ошибка при загрузке данных. Убедитесь, что Supabase настроен правильно (проверьте .env файл)');
       } finally {
         setIsLoading(false);
       }
@@ -667,8 +672,11 @@ const App: React.FC = () => {
   // Подписка на изменения в реальном времени
   useEffect(() => {
     const unsubscribe = subscribeToDataChanges((newData) => {
-      console.log('📥 Получены обновленные данные через real-time');
+      console.log('📡 Получены обновленные данные через real-time синхронизацию');
+      setIsSyncing(true); // Устанавливаем флаг, чтобы не сохранять данные обратно
       setData(newData);
+      // Сбрасываем флаг через небольшую задержку
+      setTimeout(() => setIsSyncing(false), 100);
     });
 
     // Отписка при размонтировании
@@ -679,16 +687,19 @@ const App: React.FC = () => {
 
   // Сохранение данных при изменении (с дебаунсом для оптимизации)
   useEffect(() => {
-    if (!isLoading && Object.keys(data).length > 0) {
-      const timeoutId = setTimeout(() => {
-        saveData(data).catch(error => {
-          console.error('Ошибка при сохранении данных:', error);
-        });
-      }, 500); // Дебаунс 500мс
-
-      return () => clearTimeout(timeoutId);
+    // Не сохраняем, если данные пришли через real-time синхронизацию или если идет загрузка
+    if (isSyncing || isLoading || Object.keys(data).length === 0) {
+      return;
     }
-  }, [data, isLoading]);
+
+    const timeoutId = setTimeout(() => {
+      saveData(data).catch(error => {
+        console.error('❌ Ошибка при сохранении данных в Supabase:', error);
+      });
+    }, 500); // Дебаунс 500мс
+
+    return () => clearTimeout(timeoutId);
+  }, [data, isLoading, isSyncing]);
 
   const handleLogout = () => setCurrentUser(null);
   const handleUpdate = (updater: (prev: AppData) => AppData) => setData(updater);

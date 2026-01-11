@@ -3,9 +3,6 @@ import { supabase } from './supabase';
 
 const REPORTS_ID = 'main-reports'; // ID единственной записи с данными
 
-// Fallback на localStorage для офлайн режима
-const STORAGE_KEY = 'nebula_crm_v2';
-
 const ALENA_CITIES = [
   'Ростов',
   'Н.Новгород',
@@ -132,28 +129,23 @@ const createInitialData = (): AppData => {
   return initialData as AppData;
 };
 
+// Проверка, настроен ли Supabase
+const isSupabaseConfigured = (): boolean => {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  return !!(supabaseUrl && supabaseKey);
+};
+
 // Получение данных из Supabase
 export const getInitialData = async (): Promise<AppData> => {
   // Проверяем, есть ли Supabase конфигурация
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseKey) {
-    console.warn('⚠️ Supabase не настроен, используется localStorage');
-    // Fallback на localStorage
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      try {
-        return JSON.parse(stored);
-      } catch (e) {
-        console.error("Failed to parse storage", e);
-      }
-    }
-    return createInitialData();
+  if (!isSupabaseConfigured()) {
+    console.error('❌ Supabase не настроен! Пожалуйста, настройте VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY в .env файле');
+    throw new Error('Supabase не настроен. Проверьте переменные окружения VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY');
   }
 
   try {
-    // Пытаемся получить данные из Supabase
+    // Получаем данные из Supabase
     const { data, error } = await supabase
       .from('reports')
       .select('data')
@@ -169,21 +161,10 @@ export const getInitialData = async (): Promise<AppData> => {
         return initialData;
       }
       console.error('❌ Ошибка при получении данных из Supabase:', error);
-      // Fallback на localStorage
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        try {
-          return JSON.parse(stored);
-        } catch (e) {
-          console.error("Failed to parse storage", e);
-        }
-      }
-      return createInitialData();
+      throw error;
     }
 
     if (data && data.data) {
-      // Сохраняем в localStorage для офлайн режима
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data.data));
       return data.data as AppData;
     }
 
@@ -193,69 +174,37 @@ export const getInitialData = async (): Promise<AppData> => {
     return initialData;
   } catch (error) {
     console.error('❌ Ошибка при подключении к Supabase:', error);
-    // Fallback на localStorage
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      try {
-        return JSON.parse(stored);
-      } catch (e) {
-        console.error("Failed to parse storage", e);
-      }
-    }
-    return createInitialData();
+    throw error;
   }
 };
 
-// Сохранение данных в Supabase
+// Сохранение данных в Supabase с использованием upsert
 export const saveData = async (data: AppData): Promise<void> => {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-  // Всегда сохраняем в localStorage для офлайн режима
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-
-  if (!supabaseUrl || !supabaseKey) {
-    console.warn('⚠️ Supabase не настроен, данные сохранены только в localStorage');
-    return;
+  // Проверяем, есть ли Supabase конфигурация
+  if (!isSupabaseConfigured()) {
+    console.error('❌ Supabase не настроен! Данные не будут сохранены.');
+    throw new Error('Supabase не настроен. Проверьте переменные окружения VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY');
   }
 
   try {
-    // Проверяем, существует ли запись
-    const { data: existingData, error: selectError } = await supabase
+    // Используем upsert для создания или обновления записи
+    const { error } = await supabase
       .from('reports')
-      .select('id')
-      .eq('id', REPORTS_ID)
-      .single();
+      .upsert({
+        id: REPORTS_ID,
+        data: data
+      }, {
+        onConflict: 'id'
+      });
 
-    if (selectError && selectError.code === 'PGRST116') {
-      // Записи нет, создаем новую
-      const { error: insertError } = await supabase
-        .from('reports')
-        .insert({
-          id: REPORTS_ID,
-          data: data
-        });
-
-      if (insertError) {
-        console.error('❌ Ошибка при создании записи в Supabase:', insertError);
-      } else {
-        console.log('✅ Данные успешно сохранены в Supabase');
-      }
-    } else {
-      // Запись существует, обновляем
-      const { error: updateError } = await supabase
-        .from('reports')
-        .update({ data: data })
-        .eq('id', REPORTS_ID);
-
-      if (updateError) {
-        console.error('❌ Ошибка при обновлении данных в Supabase:', updateError);
-      } else {
-        console.log('✅ Данные успешно обновлены в Supabase');
-      }
+    if (error) {
+      console.error('❌ Ошибка при сохранении данных в Supabase:', error);
+      throw error;
     }
+    console.log('✅ Данные успешно сохранены в Supabase');
   } catch (error) {
     console.error('❌ Ошибка при сохранении в Supabase:', error);
+    throw error;
   }
 };
 
@@ -263,10 +212,8 @@ export const saveData = async (data: AppData): Promise<void> => {
 export const subscribeToDataChanges = (
   callback: (data: AppData) => void
 ): (() => void) => {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseKey) {
+  // Проверяем, есть ли Supabase конфигурация
+  if (!isSupabaseConfigured()) {
     console.warn('⚠️ Supabase не настроен, real-time подписка недоступна');
     return () => {}; // Пустая функция для отписки
   }
@@ -283,19 +230,23 @@ export const subscribeToDataChanges = (
         table: 'reports',
         filter: `id=eq.${REPORTS_ID}`
       },
-      async (payload) => {
+      (payload) => {
         console.log('📡 Получено обновление из Supabase:', payload.eventType);
         
         if (payload.new && (payload.new as any).data) {
           const newData = (payload.new as any).data as AppData;
-          // Обновляем localStorage
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(newData));
           // Вызываем callback для обновления UI
           callback(newData);
         }
       }
     )
-    .subscribe();
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        console.log('✅ Подписка на изменения активна');
+      } else if (status === 'CHANNEL_ERROR') {
+        console.error('❌ Ошибка подписки на изменения');
+      }
+    });
 
   // Возвращаем функцию для отписки
   return () => {

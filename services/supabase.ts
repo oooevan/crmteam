@@ -8,7 +8,16 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('⚠️ Supabase credentials not found. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env file');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Создаем клиент Supabase (Supabase клиент сам устанавливает правильные заголовки)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  db: {
+    schema: 'public',
+  },
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+  },
+});
 
 // Типы для работы с Supabase
 export interface ReportsRow {
