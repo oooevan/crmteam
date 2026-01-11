@@ -1,7 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Ваши реальные данные напрямую (так мы на 100% исключим ошибки .env)
-const supabaseUrl = 'https://dtponlzqgggjzivezzpp.supabase.co';
+// 
+const supabaseUrl = 'https://dtponlzqggqjzivezzpp.supabase.co/';
 const supabaseAnonKey = 'sb_publishable_nknaT2_yScTYDgsdlSVHag_mPCZTN6E';
 
 // Создаем клиент
