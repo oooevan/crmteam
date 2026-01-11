@@ -704,17 +704,18 @@ const App: React.FC = () => {
 
   // Сохранение данных при изменении (с дебаунсом для оптимизации)
   useEffect(() => {
-    console.log('🔍 Проверка условий сохранения:', {
+    console.log('🔍 useEffect сохранения вызван. Проверка условий:', {
       hasLoadedFromServer,
       isSyncing,
       isLoading,
       dataKeys: Object.keys(data).length,
-      dataEmpty: Object.keys(data).length === 0
+      dataEmpty: Object.keys(data).length === 0,
+      dataSnapshot: JSON.stringify(data).substring(0, 100) + '...'
     });
 
     // Защита от перезаписи: не сохраняем, если данные еще не загрузились с сервера
     if (!hasLoadedFromServer) {
-      console.log('⏸️ Сохранение отложено: данные еще не загружены с сервера');
+      console.log('⏸️ Сохранение отложено: данные еще не загружены с сервера (hasLoadedFromServer =', hasLoadedFromServer, ')');
       return;
     }
     
@@ -730,7 +731,7 @@ const App: React.FC = () => {
       return;
     }
 
-    console.log('✅ Все условия пройдены, запускаю сохранение через 500мс...');
+    console.log('✅ Все условия пройдены! hasLoadedFromServer =', hasLoadedFromServer, ', запускаю сохранение через 500мс...');
     const timeoutId = setTimeout(() => {
       console.log('💾 Сохранение данных в Supabase...', Object.keys(data));
       saveData(data).catch(error => {
@@ -738,20 +739,38 @@ const App: React.FC = () => {
       });
     }, 500); // Дебаунс 500мс
 
-    return () => clearTimeout(timeoutId);
+    return () => {
+      console.log('🧹 Очистка таймера сохранения');
+      clearTimeout(timeoutId);
+    };
   }, [data, isLoading, isSyncing, hasLoadedFromServer]);
 
   const handleLogout = () => setCurrentUser(null);
-  const handleUpdate = (updater: (prev: AppData) => AppData) => setData(updater);
+  const handleUpdate = (updater: (prev: AppData) => AppData) => {
+    setData(prev => {
+      const newData = updater(prev);
+      console.log('📝 Локальное изменение:', newData);
+      return newData;
+    });
+  };
 
-  const updateSingle = (owner: string, pId: string, updated: Project) => 
-    handleUpdate(prev => ({ ...prev, [owner]: { projects: prev[owner].projects.map(p => p.id === pId ? updated : p) } }));
+  const updateSingle = (owner: string, pId: string, updated: Project) => {
+    console.log('🔄 updateSingle вызван:', { owner, pId, updatedName: updated.name });
+    handleUpdate(prev => {
+      const newData = { ...prev, [owner]: { projects: prev[owner].projects.map(p => p.id === pId ? updated : p) } };
+      return newData;
+    });
+  };
   
-  const deleteSingle = (owner: string, pId: string) => 
+  const deleteSingle = (owner: string, pId: string) => {
+    console.log('🗑️ deleteSingle вызван:', { owner, pId });
     handleUpdate(prev => ({ ...prev, [owner]: { projects: prev[owner].projects.filter(p => p.id !== pId) } }));
+  };
 
-  const updateUserProjects = (owner: string, projects: Project[]) => 
+  const updateUserProjects = (owner: string, projects: Project[]) => {
+    console.log('🔄 updateUserProjects вызван:', { owner, projectsCount: projects.length });
     handleUpdate(prev => ({ ...prev, [owner]: { projects } }));
+  };
 
   // Показываем индикатор загрузки, пока данные загружаются
   if (isLoading && Object.keys(data).length === 0) {
