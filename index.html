@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FROMI CRM 2.0</title>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
+            colors: {
+              glass: "rgba(255, 255, 255, 0.03)",
+              glassBorder: "rgba(255, 255, 255, 0.08)",
+              glassHover: "rgba(255, 255, 255, 0.08)",
+            },
+            animation: {
+              'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'fade-in': 'fadeIn 0.3s ease-in-out',
+              'slide-up': 'slideUp 0.4s ease-out',
+            },
+            keyframes: {
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
+              },
+              slideUp: {
+                '0%': { transform: 'translateY(20px)', opacity: '0' },
+                '100%': { transform: 'translateY(0)', opacity: '1' },
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body {
+        background-color: #000000;
+        color: #e2e8f0;
+        overflow-x: hidden;
+      }
+      /* Custom scrollbar */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(255,255,255,0.1); 
+        border-radius: 10px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: rgba(255,255,255,0.2); 
+      }
+      
+      .glass-card {
+        background: rgba(255, 255, 255, 0.03);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+      }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "recharts": "https://esm.sh/recharts@^3.6.0",
+    "framer-motion": "https://esm.sh/framer-motion@^12.25.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+      const { useState, useEffect, useMemo, useCallback, memo } = React;
+
+      // --- Icons (SVG Components) ---
+      const Icons = {
+        Users: ({ size=24, className="" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+        LayoutDashboard: ({ size=24, className="" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>,
+        Plus: ({ size=24, className="" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M5 12h14"/><path d="M12 5v14"/></svg>,
+        TrendingUp: ({ size=24, className="" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>,
+        DollarSign: ({ size=24, className="" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
+        Target: ({ size=24, className="" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>,
+        LogOut: ({ size=24, className="" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>,
+        ChevronRight: ({ size=24, className="" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m9 18 6-6-6-6"/></svg>,
+        ChevronLeft: ({ size=24, className="" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m15 18-6-6 6-6"/></svg>,
+        Calendar: ({ size=24, className="" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>,
+        Trash2: ({ size=24, className="" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>,
+        ArrowUpDown: ({ size=24, className="" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/></svg>,
+        Activity: ({ size=24, className="" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>,
+        Zap: ({ size=24, className="" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
+        PieChart: ({ size=24, className="" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>,
+        BarChart3: ({ size=24, className="" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+      };
+
+      // --- Constants & Types ---
+      const TARGETOLOGISTS = ['Алена', 'Денис', 'Алексей', 'Сергей', 'Анастасия', 'Иван'];
+      const STORAGE_KEY = 'nebula_crm_v2';
+      const CALENDAR_START_DATE = new Date('2025-12-29');
+
+      const CITY_DATA = {
+        'Алена': ['Ростов','Н.Новгород','Тюмень','Воронеж','Ярославль','Ярославль Фрунзе','Красноярск','ЕКБ Ботаника','Рязань','Магнитогорск','ЕКБ','Купчино','Колпино'],
+        'Денис': ['Новороссийск','Челябинск','Пермь','Пенза','Старый Оскол','Саранск','Находка','Мурино (НЕ левита)','Балашиха','Ханты Мансийск','Самара','Апрелевка','Казань Максимова'],
+        'Алексей': ['Краснодар','Саратов','Чебоксары','Владивосток','Ярославль','Барнаул','Казань МЕРИД','Смоленск','Екатеринбург','Каменск Уральский','Реутов','Чита'],
+        'Сергей': ['Казань (Дубравная)','Севастополь','Владимир','Пятигорск','Коломна','Вологда','Петергоф','Красногорск Fit&Soul','Саратов','Магнитогорск','Череповец','Тула'],
+        'Анастасия': ['Белгород','Пушкин','Выборг','Жуковский','Краснодар','Темрюк','Домодедово','Уфа','Посад','Орел','Железногорск','Подольск','Братск','Котельники','Лобня','Нижний Новгород','Ростов','Всеволожск','Пышма'],
+        'Иван': ['Химки (Сходня)','Кемерово (Окт)','Серпухов','Камчатка','Одинцово','Бор']
+      };
+
+      const NEW_PROJECT_TEMPLATE = {
+        id: '', name: '', leads: {}, weeks: {},
+        defaultGoal: 100, defaultBudget: 5000, defaultTargetCpa: 500
+      };
+
+      // --- Helpers ---
+      const generateId = () => Math.random().toString(36).substr(2, 9);
+      const formatDate = (date) => date.toISOString().split('T')[0];
+      const formatDisplayDate = (date) => {
+        const d = date.getDate().toString().padStart(2, '0');
+        const m = (date.getMonth() + 1).toString().padStart(2, '0');
+        return `${d}.${m}`;
+      };
+
+      const getWeekDays = (startMonday) => {
+        const days = [];
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(startMonday);
+          d.setDate(startMonday.getDate() + i);
+          days.push({
+            iso: formatDate(d),
+            display: formatDisplayDate(d),
+            name: ['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'][i]
+          });
+        }
+        return days;
+      };
+
+      const generateWeeks = (startDate, weeksCount = 52) => {
+        const weeks = [];
+        for (let i = 0; i < weeksCount; i++) {
+          const d = new Date(startDate);
+          d.setDate(startDate.getDate() + (i * 7));
+          const end = new Date(d);
+          end.setDate(d.getDate() + 6);
+          weeks.push({
+            id: formatDate(d),
+            label: `${formatDisplayDate(d)} - ${formatDisplayDate(end)}`,
+            start: d,
+            monthName: d.toLocaleString('ru-RU', { month: 'long' })
+          });
+        }
+        return weeks;
+      };
+
+      const getMondaysInMonth = (year, month) => {
+        const mondays = [];
+        const d = new Date(year, month, 1);
+        while (d.getMonth() === month) {
+          if (d.getDay() === 1) mondays.push(formatDate(d));
+          d.setDate(d.getDate() + 1);
+        }
+        return mondays;
+      };
+
+      const isDateInMonth = (dateStr, referenceWeekStart) => {
+        const d = new Date(dateStr);
+        const ref = new Date(referenceWeekStart);
+        return d.getMonth() === ref.getMonth() && d.getFullYear() === ref.getFullYear();
+      };
+
+      const getMondaysInSameMonth = (referenceDateStr) => {
+        const ref = new Date(referenceDateStr);
+        return getMondaysInMonth(ref.getFullYear(), ref.getMonth());
+      };
+
+      const WEEKS_LIST = generateWeeks(CALENDAR_START_DATE, 52);
+
+      const createProject = (name) => ({
+        ...NEW_PROJECT_TEMPLATE,
+        id: generateId(),
+        name
+      });
+
+      const getInitialData = () => {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          try { return JSON.parse(stored); } catch (e) { console.error(e); }
+        }
+        const initialData = {};
+        TARGETOLOGISTS.forEach((name) => {
+          const cities = CITY_DATA[name] || [];
+          initialData[name] = { projects: cities.map(city => createProject(city)) };
+        });
+        return initialData;
+      };
+
+      const saveData = (data) => localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+
+      // --- Components ---
+
+      const GlassCard = ({ children, className = '', onClick }) => (
+        <div 
+          onClick={onClick}
+          className={`glass-card rounded-2xl ${onClick ? 'cursor-pointer hover:bg-glassHover transition-all duration-300' : ''} ${className}`}
+        >
+          {children}
+        </div>
+      );
+
+      const StatCard = ({ title, value, subtext, icon: Icon, color, trend }) => (
+        <GlassCard className="relative overflow-hidden group p-6 animate-fade-in">
+          <div className={`absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity ${color}`}>
+            <Icon size={80} />
+          </div>
+          <div className="relative z-10">
+            <div className="flex items-center gap-2 mb-2">
+              <div className={`p-2 rounded-lg bg-white/5 ${color} text-white`}>
+                <Icon size={18} />
+              </div>
+              <span className="text-gray-400 text-xs font-medium uppercase tracking-wider">{title}</span>
+            </div>
+            <div className="flex items-baseline gap-2 mt-2">
+              <h3 className="text-3xl font-bold text-white tracking-tight">{value}</h3>
+            </div>
+            <div className="mt-3 flex items-center justify-between">
+               <p className="text-xs text-gray-500 font-medium">{subtext}</p>
+               {trend && (
+                 <span className={`text-xs px-2 py-0.5 rounded-full ${trend > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
+                   {trend > 0 ? '+' : ''}{trend}%
+                 </span>
+               )}
+            </div>
+          </div>
+        </GlassCard>
+      );
+
+      const ProgressBar = ({ percent }) => {
+        const isOver = percent > 100;
+        const color = percent < 80 ? 'bg-rose-500' : percent < 100 ? 'bg-amber-500' : 'bg-emerald-500';
+        const glow = percent < 80 ? 'shadow-[0_0_10px_rgba(244,63,94,0.5)]' : 'shadow-[0_0_10px_rgba(16,185,129,0.5)]';
+        
+        return (
+          <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden relative">
+            <div 
+              className={`h-full absolute top-0 left-0 rounded-full ${color} ${isOver ? glow : ''} transition-all duration-1000 ease-out`}
+              style={{ width: `${Math.min(percent, 100)}%` }}
+            />
+            {isOver && (
+              <div className="absolute top-0 right-0 h-full w-1 bg-white animate-pulse" />
+            )}
+          </div>
+        );
+      };
+
+      const ProjectRow = memo(({ project, weekStart, days, onUpdate, onDelete, ownerName, isPlanEditable = true }) => {
+        const currentStats = project.weeks[weekStart] || {
+          budget: project.defaultBudget, spend: 0, goal: project.defaultGoal, targetCpa: project.defaultTargetCpa
+        };
+
+        const weeklyLeadsCount = days.reduce((acc, date) => acc + (project.leads[date] || 0), 0);
+        const actualCpa = weeklyLeadsCount > 0 ? currentStats.spend / weeklyLeadsCount : 0;
+        const planPercent = currentStats.goal > 0 ? (weeklyLeadsCount / currentStats.goal) * 100 : 0;
+        const isCpaGood = actualCpa > 0 && currentStats.targetCpa > 0 ? actualCpa <= currentStats.targetCpa : true;
+        const cpaColor = currentStats.spend > 0 ? (isCpaGood ? 'text-emerald-400' : 'text-rose-400 font-bold') : 'text-gray-400';
+        const cpaBg = currentStats.spend > 0 ? (isCpaGood ? 'bg-emerald-500/10' : 'bg-rose-500/10') : '';
+
+        const handleUpdate = (updates) => onUpdate(project.id, { ...project, ...updates });
+        const handleStatChange = (field, value) => handleUpdate({ weeks: { ...project.weeks, [weekStart]: { ...currentStats, [field]: value } } });
+
+        const inputClass = "w-full bg-transparent text-center focus:bg-white/10 focus:outline-none rounded py-1 transition-colors";
+        const cellClass = "p-2 border-r border-white/5 last:border-r-0";
+
+        return (
+          <tr className="hover:bg-white/5 transition-colors group">
+            {ownerName && <td className={`${cellClass} min-w-[100px] text-indigo-300 font-medium`}>{ownerName}</td>}
+            <td className={`${cellClass} min-w-[150px]`}>
+              <input value={project.name} onChange={(e) => handleUpdate({ name: e.target.value })} className="w-full bg-transparent text-left font-medium focus:outline-none py-1 px-2 text-white" placeholder="Проект" />
+            </td>
+            {days.map((date) => (
+              <td key={date} className={`${cellClass} w-[60px]`}>
+                <input type="number" min="0" value={project.leads[date] === 0 ? '' : project.leads[date]?.toString() || ''} onChange={(e) => handleUpdate({ leads: { ...project.leads, [date]: parseFloat(e.target.value) || 0 } })} className={`${inputClass} text-gray-300`} placeholder="0" />
+              </td>
+            ))}
+            <td className={`${cellClass} text-center font-bold text-white bg-white/5 w-[80px]`}>{weeklyLeadsCount}</td>
+            <td className={`${cellClass} w-[70px]`}>
+              <input type="number" value={currentStats.goal || ''} onChange={(e) => handleStatChange('goal', parseFloat(e.target.value))} disabled={!isPlanEditable} className={`${inputClass} ${!isPlanEditable ? 'text-gray-500 cursor-not-allowed' : 'text-gray-400'}`} placeholder="План" />
+            </td>
+            <td className={`${cellClass} text-center w-[70px]`}><span className={planPercent >= 100 ? 'text-emerald-400 font-bold' : 'text-blue-400'}>{planPercent.toFixed(0)}%</span></td>
+            <td className={`${cellClass} w-[90px]`}><input type="number" value={currentStats.budget || ''} onChange={(e) => handleStatChange('budget', parseFloat(e.target.value))} className={`${inputClass} text-white`} placeholder="₽" /></td>
+            <td className={`${cellClass} w-[90px]`}><input type="number" value={currentStats.spend || ''} onChange={(e) => handleStatChange('spend', parseFloat(e.target.value))} className={`${inputClass} text-white`} placeholder="₽" /></td>
+            <td className={`${cellClass} text-center w-[90px] ${cpaBg}`}><span className={`font-medium ${cpaColor}`}>{currentStats.spend > 0 && weeklyLeadsCount === 0 ? 'INF' : `${actualCpa.toFixed(0)}`}</span></td>
+            <td className={`${cellClass} w-[90px]`}><input type="number" value={currentStats.targetCpa || ''} onChange={(e) => handleStatChange('targetCpa', parseFloat(e.target.value))} className={`${inputClass} text-gray-400`} placeholder="₽" /></td>
+            <td className={`${cellClass} w-[50px] text-center`}>
+              <button onClick={() => onDelete(project.id)} className="p-1.5 text-gray-600 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors opacity-40 hover:opacity-100"><Icons.Trash2 size={16} /></button>
+            </td>
+          </tr>
+        );
+      });
+
+      // --- Admin Dashboard ---
+      const AdminDashboard = ({ data, weekStart, onUpdateProject, onDeleteProject }) => {
+        const days = useMemo(() => getWeekDays(new Date(weekStart)).map(d => d.iso), [weekStart]);
+        const [selectedMonthIndex, setSelectedMonthIndex] = useState(0);
+        const [sortConfig, setSortConfig] = useState({ key: 'leads', direction: 'desc' });
+
+        const stats = useMemo(() => {
+          let totalLeads = 0, totalSpend = 0, totalGoal = 0;
+          const memberPerformance = Object.entries(data).map(([name, userData]) => {
+            let mLeads = 0, mSpend = 0, mGoal = 0;
+            userData.projects.forEach(p => {
+              mLeads += days.reduce((acc, date) => acc + (p.leads[date] || 0), 0);
+              const wStats = p.weeks[weekStart] || { spend: 0, goal: p.defaultGoal };
+              mSpend += (wStats.spend || 0);
+              mGoal += (wStats.goal || 0);
+            });
+            totalLeads += mLeads; totalSpend += mSpend; totalGoal += mGoal;
+            return { name, completion: mGoal > 0 ? (mLeads / mGoal) * 100 : 0, leads: mLeads, cpa: mLeads > 0 ? mSpend / mLeads : 0 };
+          }).sort((a, b) => b.completion - a.completion);
+          return { totalLeads, totalSpend, avgCpa: totalLeads > 0 ? totalSpend / totalLeads : 0, memberPerformance, totalGoal };
+        }, [data, days, weekStart]);
+
+        const dynamicsData = useMemo(() => {
+          const prevWeekIndex = WEEKS_LIST.findIndex(w => w.id === weekStart) - 1;
+          const prevWeekStart = prevWeekIndex >= 0 ? WEEKS_LIST[prevWeekIndex].id : null;
+          const prevDays = prevWeekStart ? getWeekDays(new Date(prevWeekStart)).map(d => d.iso) : [];
+          
+          const rows = Object.entries(data).map(([name, userData]) => {
+            let currentFact = 0, currentPlan = 0, currentBudget = 0, prevFact = 0, prevBudget = 0;
+            const dailyFacts = days.map(() => 0);
+            userData.projects.forEach(p => {
+              days.forEach((d, idx) => {
+                const val = (p.leads[d] || 0);
+                dailyFacts[idx] += val; currentFact += val;
+              });
+              const wStats = p.weeks[weekStart] || { goal: p.defaultGoal, spend: 0 };
+              currentPlan += (wStats.goal || 0); currentBudget += (wStats.spend || 0);
+              if (prevWeekStart) {
+                prevDays.forEach(d => prevFact += (p.leads[d] || 0));
+                prevBudget += (p.weeks[prevWeekStart]?.spend || 0);
+              }
+            });
+            const currentCPL = currentFact > 0 ? currentBudget / currentFact : 0;
+            const prevCPL = prevFact > 0 ? prevBudget / prevFact : 0;
+            return {
+              name, dailyFacts, currentFact, currentPlan, currentBudget, currentCPL,
+              deltaCPL: prevCPL > 0 ? ((currentCPL - prevCPL) / prevCPL) * 100 : 0,
+              deltaBudget: prevBudget > 0 ? ((currentBudget - prevBudget) / prevBudget) * 100 : 0,
+              deltaFact: prevFact > 0 ? ((currentFact - prevFact) / prevFact) * 100 : 0,
+              planPercent: currentPlan > 0 ? (currentFact / currentPlan) * 100 : 0
+            };
+          }).sort((a, b) => b.currentFact - a.currentFact);
+
+          const totals = rows.reduce((acc, row) => ({
+            dailyFacts: acc.dailyFacts.map((v, i) => v + row.dailyFacts[i]),
+            currentFact: acc.currentFact + row.currentFact,
+            currentPlan: acc.currentPlan + row.currentPlan,
+            currentBudget: acc.currentBudget + row.currentBudget,
+          }), { dailyFacts: [0,0,0,0,0,0,0], currentFact: 0, currentPlan: 0, currentBudget: 0 });
+
+          return { rows, totals, totalCPL: totals.currentFact > 0 ? totals.currentBudget / totals.currentFact : 0, totalPlanPercent: totals.currentPlan > 0 ? (totals.currentFact / totals.currentPlan) * 100 : 0 };
+        }, [data, days, weekStart]);
+
+        const months = useMemo(() => Array.from({length: 12}, (_, i) => ({ id: i, label: new Date(2026, i, 1).toLocaleString('ru-RU', { month: 'long' }).toUpperCase(), year: 2026 })), []);
+        const currentMonth = months[selectedMonthIndex];
+
+        const monthlyProjects = useMemo(() => {
+          const list = [];
+          Object.entries(data).forEach(([owner, userData]) => {
+            userData.projects.forEach(project => {
+              let leads = 0, goal = 0, budget = 0, spend = 0, targetCpaSum = 0, weeksCount = 0;
+              const mondays = getMondaysInMonth(currentMonth.year, currentMonth.id);
+              Object.entries(project.leads).forEach(([date, count]) => {
+                const d = new Date(date);
+                if (d.getMonth() === currentMonth.id && d.getFullYear() === currentMonth.year) leads += count;
+              });
+              mondays.forEach(m => {
+                const wStats = project.weeks[m] || { goal: project.defaultGoal, budget: project.defaultBudget, spend: 0, targetCpa: project.defaultTargetCpa };
+                goal += (wStats.goal || 0); budget += (wStats.budget || 0); spend += (project.weeks[m]?.spend || 0); targetCpaSum += (wStats.targetCpa || project.defaultTargetCpa); weeksCount++;
+              });
+              list.push({
+                owner, project, leads, goal, budget, spend,
+                actualCpa: leads > 0 ? spend / leads : 0,
+                avgTargetCpa: weeksCount > 0 ? targetCpaSum / weeksCount : project.defaultTargetCpa,
+                percent: goal > 0 ? (leads / goal) * 100 : 0
+              });
+            });
+          });
+          return list.sort((a, b) => {
+            let aVal = a[sortConfig.key], bVal = b[sortConfig.key];
+            if (sortConfig.key === 'projectName') { aVal = a.project.name.toLowerCase(); bVal = b.project.name.toLowerCase(); }
+            return (aVal < bVal ? -1 : 1) * (sortConfig.direction === 'asc' ? 1 : -1);
+          });
+        }, [data, currentMonth, sortConfig]);
+
+        const handleUpdateMonthlyGoal = (owner, project, newGoal) => {
+          const mondays = getMondaysInMonth(currentMonth.year, currentMonth.id);
+          if (!mondays.length) return;
+          const weeklyGoal = Math.round(newGoal / mondays.length);
+          const updated = { ...project, weeks: { ...project.weeks }, defaultGoal: weeklyGoal };
+          mondays.forEach(m => updated.weeks[m] = { ...(updated.weeks[m] || {}), goal: weeklyGoal });
+          onUpdateProject(owner, project.id, updated);
+        };
+
+        return (
+          <div className="space-y-8 pb-20 animate-slide-up">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatCard title="Всего лидов" value={stats.totalLeads} subtext={`${((stats.totalLeads / stats.totalGoal) * 100 || 0).toFixed(1)}% от плана`} icon={Icons.Users} color="text-indigo-400" />
+              <StatCard title="Расход" value={`${stats.totalSpend.toLocaleString()} ₽`} subtext="За неделю" icon={Icons.DollarSign} color="text-emerald-400" />
+              <StatCard title="CPL (Факт)" value={`${stats.avgCpa.toFixed(0)} ₽`} subtext="Средняя стоимость" icon={Icons.Target} color="text-rose-400" />
+              <StatCard title="Проектов" value={Object.values(data).reduce((acc, u) => acc + u.projects.length, 0)} subtext="Активные кампании" icon={Icons.Activity} color="text-amber-400" />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <GlassCard className="lg:col-span-2 overflow-hidden flex flex-col h-[450px]">
+                <div className="p-4 border-b border-white/5 bg-white/5 flex justify-between items-center">
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2"><Icons.Zap className="text-yellow-400" size={18} /> Динамика недели</h3>
+                  <span className="text-xs text-gray-400 bg-black/20 px-2 py-1 rounded">{WEEKS_LIST.find(w => w.id === weekStart)?.label}</span>
+                </div>
+                <div className="flex-1 overflow-auto">
+                  <table className="w-full text-xs text-left border-collapse">
+                    <thead className="bg-white/5 sticky top-0 z-10 text-gray-400 font-medium">
+                      <tr>
+                        <th className="p-2 min-w-[100px] border-b border-white/10">Таргетолог</th>
+                        {['ПН','ВТ','СР','ЧТ','ПТ','СБ','ВС'].map(d => <th key={d} className="p-2 text-center border-b border-white/10 w-[40px]">{d}</th>)}
+                        <th className="p-2 text-center border-b border-white/10 bg-emerald-900/10 text-emerald-400 font-bold">Факт</th>
+                        <th className="p-2 text-center border-b border-white/10">План</th>
+                        <th className="p-2 text-center border-b border-white/10 bg-gray-800/50">Бюджет</th>
+                        <th className="p-2 text-center border-b border-white/10">CPL</th>
+                        <th className="p-2 text-center border-b border-white/10">Δ CPL</th>
+                        <th className="p-2 text-center border-b border-white/10">Δ Бдж</th>
+                        <th className="p-2 text-center border-b border-white/10">План %</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {dynamicsData.rows.map(row => (
+                        <tr key={row.name} className="hover:bg-white/5 transition-colors">
+                          <td className="p-2 font-medium text-white">{row.name}</td>
+                          {row.dailyFacts.map((v, i) => <td key={i} className="p-2 text-center text-gray-400">{v}</td>)}
+                          <td className="p-2 text-center font-bold text-emerald-400 bg-emerald-900/10 border-l border-r border-white/5">{row.currentFact}</td>
+                          <td className="p-2 text-center text-gray-400">{row.currentPlan}</td>
+                          <td className="p-2 text-center text-gray-300 bg-gray-800/30">{row.currentBudget.toLocaleString()}</td>
+                          <td className="p-2 text-center font-medium">{row.currentCPL.toFixed(0)}</td>
+                          <td className={`p-2 text-center ${row.deltaCPL > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>{row.deltaCPL.toFixed(0)}%</td>
+                          <td className={`p-2 text-center ${row.deltaBudget > 0 ? 'text-gray-200' : 'text-gray-500'}`}>{row.deltaBudget.toFixed(0)}%</td>
+                          <td className="p-2 text-center font-bold text-white relative">
+                            <div className="absolute inset-0 bg-indigo-500/10 z-0" style={{ width: `${Math.min(row.planPercent, 100)}%` }} />
+                            <span className="relative z-10">{row.planPercent.toFixed(0)}%</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="bg-indigo-900/20 font-bold text-white border-t border-indigo-500/30 sticky bottom-0">
+                      <tr>
+                        <td className="p-2">ИТОГО</td>
+                        {dynamicsData.totals.dailyFacts.map((v, i) => <td key={i} className="p-2 text-center">{v}</td>)}
+                        <td className="p-2 text-center text-emerald-300 bg-emerald-900/20 border-x border-indigo-500/30">{dynamicsData.totals.currentFact}</td>
+                        <td className="p-2 text-center">{dynamicsData.totals.currentPlan}</td>
+                        <td className="p-2 text-center">{dynamicsData.totals.currentBudget.toLocaleString()}</td>
+                        <td className="p-2 text-center">{dynamicsData.totalCPL.toFixed(0)}</td>
+                        <td colSpan={2}></td>
+                        <td className="p-2 text-center text-indigo-300">{dynamicsData.totalPlanPercent.toFixed(0)}%</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </GlassCard>
+
+              {/* Custom CSS Bar Chart for Rating */}
+              <GlassCard className="p-6 flex flex-col h-[450px]">
+                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><Icons.BarChart3 className="text-indigo-400" size={18} /> Рейтинг выполнения</h3>
+                <div className="flex-1 overflow-y-auto space-y-4">
+                  {stats.memberPerformance.map((m, idx) => (
+                    <div key={m.name} className="space-y-1">
+                      <div className="flex justify-between text-xs text-gray-400">
+                        <span>{m.name}</span>
+                        <span>{m.completion.toFixed(1)}%</span>
+                      </div>
+                      <div className="h-3 bg-white/5 rounded-full overflow-hidden relative">
+                        <div 
+                          className={`h-full absolute left-0 top-0 rounded-full transition-all duration-1000 ${idx === 0 ? 'bg-emerald-500' : idx === 1 ? 'bg-blue-500' : 'bg-indigo-500'}`}
+                          style={{ width: `${Math.min(m.completion, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </GlassCard>
+            </div>
+
+            <GlassCard className="overflow-hidden">
+               <div className="p-5 border-b border-white/5 flex justify-between items-center gap-4">
+                  <h3 className="text-xl font-bold text-white flex items-center gap-2"><Icons.PieChart className="text-purple-400" /> Сводная (Месяц)</h3>
+                  <div className="flex items-center bg-black/40 rounded-lg border border-white/10 p-1">
+                      <button onClick={() => setSelectedMonthIndex(p => Math.max(0, p - 1))} disabled={selectedMonthIndex === 0} className="p-2 hover:bg-white/10 rounded text-gray-400 disabled:opacity-30"><Icons.ChevronLeft size={16} /></button>
+                      <div className="px-6 text-sm font-bold text-white min-w-[140px] text-center">{currentMonth.label}</div>
+                      <button onClick={() => setSelectedMonthIndex(p => Math.min(11, p + 1))} disabled={selectedMonthIndex === 11} className="p-2 hover:bg-white/10 rounded text-gray-400 disabled:opacity-30"><Icons.ChevronRight size={16} /></button>
+                  </div>
+               </div>
+               <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left border-collapse">
+                    <thead>
+                      <tr className="text-gray-500 text-xs font-semibold uppercase bg-black/20 border-b border-white/5">
+                        {[{id:'owner',l:'Таргетолог'},{id:'projectName',l:'Проект'},{id:'leads',l:'Лиды'},{id:'goal',l:'План'},{id:'percent',l:'Выполнение'},{id:'budget',l:'Бюджет'},{id:'spend',l:'Открут'},{id:'actualCpa',l:'CPA'},{id:'avgTargetCpa',l:'KPI CPA'}].map(h => (
+                          <th key={h.id} className="p-4 cursor-pointer hover:text-white" onClick={() => setSortConfig({key: h.id, direction: sortConfig.direction === 'asc' ? 'desc' : 'asc'})}>{h.l}</th>
+                        ))}
+                        <th className="p-4"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {monthlyProjects.map(({owner, project, leads, goal, budget, spend, actualCpa, avgTargetCpa, percent}) => (
+                        <tr key={project.id} className="hover:bg-white/[0.02]">
+                          <td className="p-4 text-indigo-300 font-medium">{owner}</td>
+                          <td className="p-4"><input className="bg-transparent w-full text-gray-200 focus:outline-none" value={project.name} onChange={(e) => onUpdateProject(owner, project.id, { ...project, name: e.target.value })} /></td>
+                          <td className="p-4 text-center text-white font-bold">{leads}</td>
+                          <td className="p-4 text-center"><input type="number" className="bg-black/20 text-center rounded py-1 w-20 text-gray-300" value={goal || ''} onChange={(e) => handleUpdateMonthlyGoal(owner, project, parseFloat(e.target.value) || 0)} /></td>
+                          <td className="p-4 w-[150px]"><ProgressBar percent={percent} /></td>
+                          <td className="p-4 text-center text-gray-500">{budget.toLocaleString()}</td>
+                          <td className="p-4 text-center text-white">{spend.toLocaleString()}</td>
+                          <td className={`p-4 text-center font-bold ${actualCpa <= avgTargetCpa ? 'text-emerald-400' : 'text-rose-400'}`}>{actualCpa.toFixed(0)}</td>
+                          <td className="p-4 text-center text-gray-500">{avgTargetCpa.toFixed(0)}</td>
+                          <td className="p-4 text-center"><button onClick={() => onDeleteProject(owner, project.id)} className="text-gray-600 hover:text-rose-400"><Icons.Trash2 size={16} /></button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+               </div>
+            </GlassCard>
+          </div>
+        );
+      };
+
+      // --- Targetologist Workspace ---
+      const TargetologistWorkspace = ({ name, projects, weekStart, onUpdateProjects }) => {
+        const weekDays = useMemo(() => getWeekDays(new Date(weekStart)), [weekStart]);
+        
+        const stats = useMemo(() => {
+          let myLeads = 0, myGoal = 0;
+          const mondays = getMondaysInSameMonth(weekStart);
+          projects.forEach(p => {
+             Object.entries(p.leads).forEach(([d, c]) => { if (isDateInMonth(d, weekStart)) myLeads += Number(c); });
+             mondays.forEach(m => { myGoal += (p.weeks[m]?.goal || 0); });
+          });
+          return { myLeads, myGoal, myPercent: myGoal > 0 ? (myLeads / myGoal) * 100 : 0 };
+        }, [projects, weekStart]);
+
+        const totals = useMemo(() => {
+          const dailySums = {}; weekDays.forEach(d => dailySums[d.iso] = 0);
+          let weekTotal = 0, totalGoal = 0, totalSpend = 0;
+          projects.forEach(p => {
+            weekDays.forEach(d => { const val = Number(p.leads[d.iso] || 0); dailySums[d.iso] += val; weekTotal += val; });
+            const w = p.weeks[weekStart] || { goal: p.defaultGoal, spend: 0 };
+            totalGoal += (w.goal || 0); totalSpend += (w.spend || 0);
+          });
+          return { dailySums, weekTotal, totalGoal, totalSpend, percent: totalGoal > 0 ? (weekTotal / totalGoal) * 100 : 0 };
+        }, [projects, weekStart, weekDays]);
+
+        return (
+          <div className="space-y-6 pb-20 animate-slide-up">
+            <div className="flex flex-col lg:flex-row justify-between items-end lg:items-center gap-6">
+              <div><h2 className="text-3xl font-bold text-white mb-1">Привет, {name}</h2><p className="text-gray-400">Твой личный дашборд эффективности</p></div>
+              <div className="flex gap-4">
+                   <GlassCard className="px-6 py-3 min-w-[140px]"><span className="text-xs text-gray-500 uppercase font-bold tracking-wider">Лиды (Мес)</span><div className="text-2xl font-bold text-white mt-1">{stats.myLeads} <span className="text-sm text-gray-500 font-normal">/ {stats.myGoal}</span></div></GlassCard>
+                   <GlassCard className="px-6 py-3 min-w-[140px]"><span className="text-xs text-gray-500 uppercase font-bold tracking-wider">Выполнение</span><div className={`text-2xl font-bold mt-1 ${stats.myPercent >= 100 ? 'text-emerald-400' : 'text-indigo-400'}`}>{stats.myPercent.toFixed(0)}%</div></GlassCard>
+                   <button onClick={() => onUpdateProjects([{ ...createProject("Новый проект"), id: generateId() }, ...projects])} className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-xl font-medium transition-all hover:scale-105"><Icons.Plus size={20} /> Добавить</button>
+              </div>
+            </div>
+
+            <GlassCard className="overflow-x-auto pb-2 border-t-4 border-t-indigo-500">
+              <table className="w-full text-sm text-left border-collapse">
+                <thead>
+                  <tr className="text-gray-400 text-xs uppercase bg-white/5 border-b border-white/10">
+                    <th className="p-4 font-medium min-w-[150px]">Проект</th>
+                    {weekDays.map(d => <th key={d.iso} className="p-4 font-medium text-center"><div className="flex flex-col"><span className="text-white font-bold">{d.name}</span><span className="text-[10px] text-gray-500">{d.display}</span></div></th>)}
+                    <th className="p-4 text-center bg-white/10 text-white border-l border-r border-white/5">Итого</th>
+                    <th className="p-4 text-center text-indigo-300">План</th>
+                    <th className="p-4 text-center">Вып.</th>
+                    <th className="p-4 text-left pl-6">Бюджет</th>
+                    <th className="p-4 text-left pl-6">Открут</th>
+                    <th className="p-4 text-center">CPA</th>
+                    <th className="p-4 text-left pl-6 text-gray-500">KPI</th>
+                    <th className="p-4"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {projects.map(p => <ProjectRow key={p.id} project={p} weekStart={weekStart} days={weekDays.map(d => d.iso)} onUpdate={(id, up) => onUpdateProjects(projects.map(pj => pj.id === id ? up : pj))} onDelete={(id) => onUpdateProjects(projects.filter(pj => pj.id !== id))} isPlanEditable={false} />)}
+                  {projects.length === 0 && <tr><td colSpan={16} className="p-10 text-center text-gray-500">Нет активных проектов</td></tr>}
+                </tbody>
+                {projects.length > 0 && (
+                  <tfoot className="bg-indigo-900/10 border-t-2 border-indigo-500/20 font-bold text-white">
+                    <tr>
+                      <td className="p-4">ИТОГО</td>
+                      {weekDays.map(d => <td key={d.iso} className="p-4 text-center">{totals.dailySums[d.iso]}</td>)}
+                      <td className="p-4 text-center bg-indigo-500/20">{totals.weekTotal}</td>
+                      <td className="p-4 text-center text-indigo-300">{totals.totalGoal}</td>
+                      <td className={`p-4 text-center ${totals.percent >= 100 ? 'text-emerald-400' : 'text-blue-400'}`}>{totals.percent.toFixed(0)}%</td>
+                      <td className="p-4 pl-6 opacity-50">-</td>
+                      <td className="p-4 pl-6">{totals.totalSpend.toLocaleString()}</td>
+                      <td className="p-4 text-center">{totals.weekTotal > 0 ? (totals.totalSpend / totals.weekTotal).toFixed(0) : 0}</td>
+                      <td colSpan={2}></td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </GlassCard>
+          </div>
+        );
+      };
+
+      // --- Main App ---
+      const App = () => {
+        const [data, setData] = useState({});
+        const [currentUser, setCurrentUser] = useState(null);
+        const [currentWeekId, setCurrentWeekId] = useState(WEEKS_LIST[0].id);
+
+        useEffect(() => { setData(getInitialData()); }, []);
+        useEffect(() => { if (Object.keys(data).length) saveData(data); }, [data]);
+
+        const updateSingle = (owner, pId, updated) => setData(prev => ({ ...prev, [owner]: { projects: prev[owner].projects.map(p => p.id === pId ? updated : p) } }));
+        const deleteSingle = (owner, pId) => setData(prev => ({ ...prev, [owner]: { projects: prev[owner].projects.filter(p => p.id !== pId) } }));
+        const updateUserProjects = (owner, projects) => setData(prev => ({ ...prev, [owner]: { projects } }));
+
+        if (!currentUser) {
+          return (
+            <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-indigo-900/20 via-black to-black animate-pulse-slow" />
+              <GlassCard className="w-full max-w-md p-10 bg-black/60 border-white/10 relative z-10 animate-fade-in">
+                <div className="text-center mb-12">
+                  <div className="w-20 h-20 bg-gradient-to-tr from-indigo-600 to-purple-600 rounded-3xl mx-auto flex items-center justify-center mb-6 shadow-lg shadow-indigo-500/30">
+                    <Icons.TrendingUp className="text-white w-10 h-10" />
+                  </div>
+                  <h1 className="text-4xl font-extrabold tracking-tight mb-2">FROMI CRM</h1>
+                  <p className="text-indigo-300 font-medium">Маркетинговая экосистема 2.0</p>
+                </div>
+                <div className="space-y-4">
+                  <button onClick={() => setCurrentUser({ role: 'Admin', name: 'Admin' })} className="w-full p-5 rounded-2xl border border-white/10 bg-white/5 hover:bg-indigo-600/20 hover:border-indigo-500 transition-all flex items-center justify-between group">
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 bg-indigo-500/20 rounded-xl text-indigo-300"><Icons.LayoutDashboard size={24} /></div>
+                      <div className="text-left"><p className="text-white font-bold">Администратор</p><p className="text-xs text-gray-500">Полный доступ к статистике</p></div>
+                    </div>
+                    <Icons.ChevronRight className="text-gray-600 group-hover:text-white transition-colors" />
+                  </button>
+                  <div className="pt-6">
+                    <p className="text-xs font-bold text-gray-600 uppercase tracking-widest mb-4">Команда</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {TARGETOLOGISTS.map((name) => (
+                        <button key={name} onClick={() => setCurrentUser({ role: 'Targetologist', name })} className="p-3 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 hover:border-white/20 transition-all text-sm font-medium text-gray-300 hover:text-white">
+                          {name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </GlassCard>
+            </div>
+          );
+        }
+
+        return (
+          <div className="min-h-screen bg-black text-slate-200">
+            <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/20 via-slate-950 to-black pointer-events-none" />
+            <header className="sticky top-0 z-50 backdrop-blur-xl bg-black/50 border-b border-white/5">
+              <div className="max-w-[1600px] mx-auto px-6 h-20 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                   <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20"><Icons.TrendingUp className="text-white w-6 h-6" /></div>
+                   <span className="text-2xl font-bold text-white tracking-tight hidden md:block">FROMI</span>
+                </div>
+                <div className="flex items-center bg-white/5 rounded-xl border border-white/10 p-1.5 shadow-inner shadow-black/50">
+                   <button onClick={() => { const idx = WEEKS_LIST.findIndex(w => w.id === currentWeekId); if (idx > 0) setCurrentWeekId(WEEKS_LIST[idx - 1].id); }} className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-colors"><Icons.ChevronLeft size={18} /></button>
+                   <div className="px-6 flex items-center gap-3 text-sm font-bold text-white min-w-[180px] justify-center"><Icons.Calendar size={16} className="text-indigo-400" />{WEEKS_LIST.find(w => w.id === currentWeekId)?.label}</div>
+                   <button onClick={() => { const idx = WEEKS_LIST.findIndex(w => w.id === currentWeekId); if (idx < WEEKS_LIST.length - 1) setCurrentWeekId(WEEKS_LIST[idx + 1].id); }} className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-colors"><Icons.ChevronRight size={18} /></button>
+                </div>
+                <div className="flex items-center gap-6">
+                   <div className="text-right hidden md:block">
+                      <p className="text-sm font-bold text-white">{currentUser.name}</p>
+                      <div className="flex items-center gap-1 justify-end">
+                        <div className={`w-1.5 h-1.5 rounded-full ${currentUser.role === 'Admin' ? 'bg-amber-400' : 'bg-emerald-400'} animate-pulse`} />
+                        <p className="text-[10px] uppercase tracking-wider text-gray-500">{currentUser.role === 'Admin' ? 'Admin' : 'Targetologist'}</p>
+                      </div>
+                   </div>
+                   <button onClick={() => setCurrentUser(null)} className="p-3 text-gray-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors"><Icons.LogOut size={20} /></button>
+                </div>
+              </div>
+            </header>
+            <main className="max-w-[1600px] mx-auto px-6 py-10 relative z-10">
+              {currentUser.role === 'Admin' 
+                ? <AdminDashboard data={data} weekStart={currentWeekId} onUpdateProject={updateSingle} onDeleteProject={deleteSingle} />
+                : <TargetologistWorkspace name={currentUser.name} projects={data[currentUser.name]?.projects || []} weekStart={currentWeekId} allData={data} onUpdateProjects={(p) => updateUserProjects(currentUser.name, p)} />
+              }
+            </main>
+          </div>
+        );
+      };
+
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(<App />);
+    </script>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>
