@@ -190,25 +190,50 @@ export const saveData = async (data: AppData): Promise<void> => {
   }
 
   try {
+    // Логируем данные перед отправкой
+    console.log('💾 Попытка сохранить данные в Supabase...');
+    console.log('📋 ID записи:', REPORTS_ID);
+    console.log('📋 Количество пользователей:', Object.keys(data).length);
+    console.log('📋 Ключи данных:', Object.keys(data));
+
     // Используем upsert для создания или обновления записи
-    const { error } = await supabase
+    // Важно: передаем id: 'main-reports' при каждом сохранении, чтобы обновлять существующую запись, а не создавать новые
+    const { data: result, error } = await supabase
       .from('reports')
       .upsert({
         id: REPORTS_ID,
         data: data
       }, {
         onConflict: 'id'
-      });
+      })
+      .select();
 
+    // Проверяем ошибку перед выводом успешного сообщения
     if (error) {
-      console.error('❌ Ошибка при сохранении данных в Supabase:', error);
+      console.error('❌ ОШИБКА SUPABASE при сохранении данных:');
+      console.error('   Сообщение:', error.message);
+      console.error('   Детали:', error.details);
+      console.error('   Подсказка:', error.hint);
+      console.error('   Код ошибки:', error.code);
+      console.error('   Полный объект ошибки:', error);
       throw error;
     }
+
+    // Сообщение об успехе показываем только если ошибки нет
     console.log('✅ Данные успешно сохранены в Supabase');
+    console.log('💾 ID записи:', REPORTS_ID);
     console.log('💾 Сохранено пользователей:', Object.keys(data).length);
     console.log('🔔 Событие должно быть отправлено через Realtime...');
-  } catch (error) {
+    
+    // Логируем результат для диагностики
+    if (result) {
+      console.log('📦 Результат операции:', result);
+    }
+  } catch (error: any) {
     console.error('❌ Ошибка при сохранении в Supabase:', error);
+    if (error?.message) {
+      console.error('❌ ОШИБКА SUPABASE:', error.message);
+    }
     throw error;
   }
 };
