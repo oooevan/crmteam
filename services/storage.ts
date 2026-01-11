@@ -129,21 +129,8 @@ const createInitialData = (): AppData => {
   return initialData as AppData;
 };
 
-// Проверка, настроен ли Supabase
-const isSupabaseConfigured = (): boolean => {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  return !!(supabaseUrl && supabaseKey);
-};
-
 // Получение данных из Supabase
 export const getInitialData = async (): Promise<AppData> => {
-  // Проверяем, есть ли Supabase конфигурация
-  if (!isSupabaseConfigured()) {
-    console.error('❌ Supabase не настроен! Пожалуйста, настройте VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY в .env файле');
-    throw new Error('Supabase не настроен. Проверьте переменные окружения VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY');
-  }
-
   try {
     // Получаем данные из Supabase
     const { data, error } = await supabase
@@ -158,6 +145,7 @@ export const getInitialData = async (): Promise<AppData> => {
         console.log('📝 Создание начальной записи в Supabase...');
         const initialData = createInitialData();
         await saveData(initialData);
+        console.log('BASE DATA:', initialData);
         return initialData;
       }
       console.error('❌ Ошибка при получении данных из Supabase:', error);
@@ -166,14 +154,14 @@ export const getInitialData = async (): Promise<AppData> => {
 
     if (data && data.data) {
       const fetchedData = data.data as AppData;
-      console.log('📦 JSON из базы:', fetchedData);
-      console.log('📊 Ключи в данных:', Object.keys(fetchedData));
+      console.log('BASE DATA:', fetchedData);
       return fetchedData;
     }
 
     // Если данных нет, создаем начальную структуру
     const initialData = createInitialData();
     await saveData(initialData);
+    console.log('BASE DATA:', initialData);
     return initialData;
   } catch (error) {
     console.error('❌ Ошибка при подключении к Supabase:', error);
@@ -183,30 +171,14 @@ export const getInitialData = async (): Promise<AppData> => {
 
 // Сохранение данных в Supabase с использованием upsert
 export const saveData = async (data: AppData): Promise<void> => {
-  // Проверяем, есть ли Supabase конфигурация
-  if (!isSupabaseConfigured()) {
-    console.error('❌ Supabase не настроен! Данные не будут сохранены.');
-    throw new Error('Supabase не настроен. Проверьте переменные окружения VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY');
-  }
-
   try {
-    // Логируем данные перед отправкой
-    console.log('💾 Попытка сохранить данные в Supabase...');
-    console.log('📋 ID записи:', REPORTS_ID);
-    console.log('📋 Количество пользователей:', Object.keys(data).length);
-    console.log('📋 Ключи данных:', Object.keys(data));
-
     // Используем upsert для создания или обновления записи
-    // Важно: передаем id: 'main-reports' при каждом сохранении, чтобы обновлять существующую запись, а не создавать новые
-    const { data: result, error } = await supabase
+    const { error } = await supabase
       .from('reports')
       .upsert({
         id: REPORTS_ID,
         data: data
-      }, {
-        onConflict: 'id'
-      })
-      .select();
+      });
 
     // Проверяем ошибку перед выводом успешного сообщения
     if (error) {
@@ -215,20 +187,10 @@ export const saveData = async (data: AppData): Promise<void> => {
       console.error('   Детали:', error.details);
       console.error('   Подсказка:', error.hint);
       console.error('   Код ошибки:', error.code);
-      console.error('   Полный объект ошибки:', error);
       throw error;
     }
 
-    // Сообщение об успехе показываем только если ошибки нет
     console.log('✅ Данные успешно сохранены в Supabase');
-    console.log('💾 ID записи:', REPORTS_ID);
-    console.log('💾 Сохранено пользователей:', Object.keys(data).length);
-    console.log('🔔 Событие должно быть отправлено через Realtime...');
-    
-    // Логируем результат для диагностики
-    if (result) {
-      console.log('📦 Результат операции:', result);
-    }
   } catch (error: any) {
     console.error('❌ Ошибка при сохранении в Supabase:', error);
     if (error?.message) {
@@ -242,12 +204,6 @@ export const saveData = async (data: AppData): Promise<void> => {
 export const subscribeToDataChanges = (
   callback: (data: AppData) => void
 ): (() => void) => {
-  // Проверяем, есть ли Supabase конфигурация
-  if (!isSupabaseConfigured()) {
-    console.warn('⚠️ Supabase не настроен, real-time подписка недоступна');
-    return () => {}; // Пустая функция для отписки
-  }
-
   console.log('🔔 Подписка на изменения данных в реальном времени...');
   console.log('🔍 ID записи для подписки:', REPORTS_ID);
 

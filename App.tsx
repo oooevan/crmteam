@@ -372,7 +372,7 @@ const AdminDashboard: React.FC<{
         />
         <StatCard 
           title="Проектов" 
-          value={Object.values(data).reduce((acc, u) => acc + (u as UserData).projects.length, 0)} 
+          value={Object.values(data).reduce((acc: number, u) => acc + (u as UserData).projects.length, 0)} 
           subtext="Активные кампании"
           icon={Activity} color="text-amber-400" 
         />
@@ -669,8 +669,6 @@ const App: React.FC = () => {
         console.log('✅ Флаг hasLoadedFromServer установлен в true');
       } catch (error) {
         console.error('❌ Ошибка при загрузке данных:', error);
-        // При ошибке показываем сообщение пользователю
-        alert('Ошибка при загрузке данных. Убедитесь, что Supabase настроен правильно (проверьте .env файл)');
       } finally {
         setIsLoading(false);
       }
