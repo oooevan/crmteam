@@ -47,3 +47,6 @@ CREATE POLICY "Allow all operations" ON reports
 COMMENT ON TABLE reports IS 'Хранилище отчетов CRM системы. Содержит данные всех таргетологов в формате JSONB';
 COMMENT ON COLUMN reports.data IS 'JSON объект с данными всех таргетологов и их проектов';
 COMMENT ON COLUMN reports.updated_at IS 'Время последнего обновления данных';
+
+-- Включение Realtime для таблицы reports (важно для синхронизации между браузерами)
+ALTER PUBLICATION supabase_realtime ADD TABLE reports;

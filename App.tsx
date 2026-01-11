@@ -647,6 +647,7 @@ const App: React.FC = () => {
   const [currentWeekId, setCurrentWeekId] = useState(WEEKS_LIST[0].id);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false); // Флаг для предотвращения циклических обновлений
+  const [hasLoadedFromServer, setHasLoadedFromServer] = useState(false); // Флаг для защиты от перезаписи пустым объектом
 
   // Загрузка данных при монтировании компонента
   useEffect(() => {
@@ -655,8 +656,16 @@ const App: React.FC = () => {
         setIsLoading(true);
         console.log('📥 Загрузка данных из Supabase...');
         const initialData = await getInitialData();
-        setData(initialData);
         console.log('✅ Данные успешно загружены из Supabase');
+        console.log('📋 Загруженные пользователи:', Object.keys(initialData));
+        
+        // Проверяем структуру данных для текущего пользователя (если он уже выбран)
+        if (currentUser?.name && initialData[currentUser.name]) {
+          console.log(`👤 Данные для ${currentUser.name}:`, initialData[currentUser.name]);
+        }
+        
+        setData(initialData);
+        setHasLoadedFromServer(true); // Устанавливаем флаг после успешной загрузки
       } catch (error) {
         console.error('❌ Ошибка при загрузке данных:', error);
         // При ошибке показываем сообщение пользователю
@@ -687,19 +696,32 @@ const App: React.FC = () => {
 
   // Сохранение данных при изменении (с дебаунсом для оптимизации)
   useEffect(() => {
+    // Защита от перезаписи: не сохраняем, если данные еще не загрузились с сервера
+    if (!hasLoadedFromServer) {
+      console.log('⏸️ Сохранение отложено: данные еще не загружены с сервера');
+      return;
+    }
+    
     // Не сохраняем, если данные пришли через real-time синхронизацию или если идет загрузка
-    if (isSyncing || isLoading || Object.keys(data).length === 0) {
+    if (isSyncing || isLoading) {
+      return;
+    }
+    
+    // Не сохраняем пустой объект
+    if (Object.keys(data).length === 0) {
+      console.log('⏸️ Сохранение отменено: данные пусты');
       return;
     }
 
     const timeoutId = setTimeout(() => {
+      console.log('💾 Сохранение данных в Supabase...', Object.keys(data));
       saveData(data).catch(error => {
         console.error('❌ Ошибка при сохранении данных в Supabase:', error);
       });
     }, 500); // Дебаунс 500мс
 
     return () => clearTimeout(timeoutId);
-  }, [data, isLoading, isSyncing]);
+  }, [data, isLoading, isSyncing, hasLoadedFromServer]);
 
   const handleLogout = () => setCurrentUser(null);
   const handleUpdate = (updater: (prev: AppData) => AppData) => setData(updater);

@@ -165,7 +165,10 @@ export const getInitialData = async (): Promise<AppData> => {
     }
 
     if (data && data.data) {
-      return data.data as AppData;
+      const fetchedData = data.data as AppData;
+      console.log('📦 JSON из базы:', fetchedData);
+      console.log('📊 Ключи в данных:', Object.keys(fetchedData));
+      return fetchedData;
     }
 
     // Если данных нет, создаем начальную структуру
@@ -221,7 +224,11 @@ export const subscribeToDataChanges = (
   console.log('🔔 Подписка на изменения данных в реальном времени...');
 
   const channel = supabase
-    .channel('reports-changes')
+    .channel(`reports-${REPORTS_ID}`, {
+      config: {
+        broadcast: { self: false }, // Не отправлять события обратно отправителю
+      },
+    })
     .on(
       'postgres_changes',
       {
@@ -231,20 +238,33 @@ export const subscribeToDataChanges = (
         filter: `id=eq.${REPORTS_ID}`
       },
       (payload) => {
-        console.log('📡 Получено обновление из Supabase:', payload.eventType);
+        console.log('📡 Получено обновление из Supabase:', payload.eventType, payload);
         
-        if (payload.new && (payload.new as any).data) {
+        if (payload.eventType === 'UPDATE' && payload.new && (payload.new as any).data) {
           const newData = (payload.new as any).data as AppData;
+          console.log('📥 Обновление данных через real-time:', Object.keys(newData));
           // Вызываем callback для обновления UI
           callback(newData);
+        } else if (payload.eventType === 'INSERT' && payload.new && (payload.new as any).data) {
+          const newData = (payload.new as any).data as AppData;
+          console.log('📥 Вставка данных через real-time:', Object.keys(newData));
+          callback(newData);
+        } else {
+          console.warn('⚠️ Неожиданный формат payload:', payload);
         }
       }
     )
-    .subscribe((status) => {
+    .subscribe((status, err) => {
       if (status === 'SUBSCRIBED') {
         console.log('✅ Подписка на изменения активна');
       } else if (status === 'CHANNEL_ERROR') {
-        console.error('❌ Ошибка подписки на изменения');
+        console.error('❌ Ошибка подписки на изменения:', err);
+      } else if (status === 'TIMED_OUT') {
+        console.error('❌ Таймаут при подписке на изменения');
+      } else if (status === 'CLOSED') {
+        console.warn('⚠️ Канал подписки закрыт');
+      } else {
+        console.log('ℹ️ Статус подписки:', status);
       }
     });
 
