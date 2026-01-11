@@ -12,7 +12,7 @@ interface ProjectRowProps {
   isPlanEditable?: boolean;
 }
 
-export const ProjectRow: React.FC<ProjectRowProps> = React.memo(({ 
+export const ProjectRow: React.FC<ProjectRowProps> = ({ 
   project, 
   weekStart, 
   days, 
@@ -40,11 +40,13 @@ export const ProjectRow: React.FC<ProjectRowProps> = React.memo(({
   const cpaBg = currentStats.spend > 0 ? (isCpaGood ? 'bg-emerald-500/10' : 'bg-rose-500/10') : '';
 
   const handleNameChange = (val: string) => {
+    console.log('📝 handleNameChange вызван:', { projectId: project.id, newValue: val });
     onUpdate(project.id, { ...project, name: val });
   };
 
   const handleLeadChange = (date: string, val: string) => {
     const num = parseFloat(val) || 0;
+    console.log('📝 handleLeadChange вызван:', { projectId: project.id, date, newValue: num });
     onUpdate(project.id, {
       ...project,
       leads: { ...project.leads, [date]: num }
@@ -52,6 +54,7 @@ export const ProjectRow: React.FC<ProjectRowProps> = React.memo(({
   };
 
   const handleStatChange = <K extends keyof WeeklyStats>(field: K, value: number) => {
+    console.log('📝 handleStatChange вызван:', { projectId: project.id, field, newValue: value });
     onUpdate(project.id, {
       ...project,
       weeks: {
@@ -173,4 +176,4 @@ export const ProjectRow: React.FC<ProjectRowProps> = React.memo(({
       </td>
     </tr>
   );
-});
+};

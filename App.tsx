@@ -577,7 +577,10 @@ const TargetologistWorkspace: React.FC<{
   };
 
   const handleUpdate = (id: string, updated: Project) => {
-    onUpdateProjects(projects.map(p => p.id === id ? updated : p));
+    console.log('🔄 handleUpdate в TargetologistWorkspace вызван:', { id, updatedName: updated.name });
+    const updatedProjects = projects.map(p => p.id === id ? updated : p);
+    console.log('🔄 Стейт обновлен (TargetologistWorkspace):', { projectsCount: updatedProjects.length });
+    onUpdateProjects(updatedProjects);
   };
 
   const handleDelete = (id: string) => {
@@ -749,7 +752,8 @@ const App: React.FC = () => {
   const handleUpdate = (updater: (prev: AppData) => AppData) => {
     setData(prev => {
       const newData = updater(prev);
-      console.log('📝 Локальное изменение:', newData);
+      console.log('🔄 Стейт обновлен:', newData);
+      console.log('📋 Ключи в обновленных данных:', Object.keys(newData));
       return newData;
     });
   };
@@ -769,7 +773,11 @@ const App: React.FC = () => {
 
   const updateUserProjects = (owner: string, projects: Project[]) => {
     console.log('🔄 updateUserProjects вызван:', { owner, projectsCount: projects.length });
-    handleUpdate(prev => ({ ...prev, [owner]: { projects } }));
+    handleUpdate(prev => {
+      const newData = { ...prev, [owner]: { projects } };
+      console.log('🔄 Стейт обновлен (updateUserProjects):', newData);
+      return newData;
+    });
   };
 
   // Показываем индикатор загрузки, пока данные загружаются
