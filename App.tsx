@@ -334,6 +334,7 @@ const AdminDashboard: React.FC<{
   }, [data, currentMonth, sortConfig]);
 
   const handleUpdateMonthlyGoal = (owner: string, project: Project, newMonthlyGoal: number) => {
+    console.log('📝 handleUpdateMonthlyGoal вызван:', { owner, projectId: project.id, newMonthlyGoal });
     const mondays = getMondaysInMonth(currentMonth.year, currentMonth.id);
     if (mondays.length === 0) return;
     const weeklyGoal = Math.round(newMonthlyGoal / mondays.length);
@@ -341,6 +342,7 @@ const AdminDashboard: React.FC<{
     mondays.forEach(m => {
         updated.weeks[m] = { ...(updated.weeks[m] || { budget: project.defaultBudget, spend: 0, targetCpa: project.defaultTargetCpa }), goal: weeklyGoal };
     });
+    console.log('📝 Обновленный проект перед передачей в onUpdateProject:', updated);
     onUpdateProject(owner, project.id, updated);
   };
 
@@ -512,7 +514,10 @@ const AdminDashboard: React.FC<{
                       <input 
                         className="bg-transparent w-full text-gray-200 focus:text-white focus:outline-none" 
                         value={project.name} 
-                        onChange={(e) => onUpdateProject(owner, project.id, { ...project, name: e.target.value })} 
+                        onChange={(e) => {
+                          console.log('📝 onChange в инпуте имени вызван:', { owner, projectId: project.id, newValue: e.target.value });
+                          onUpdateProject(owner, project.id, { ...project, name: e.target.value });
+                        }} 
                       />
                     </td>
                     <td className="p-4 text-center text-white font-bold">{leads}</td>
@@ -728,11 +733,14 @@ const App: React.FC = () => {
       return;
     }
     
-    // Не сохраняем пустой объект
-    if (Object.keys(data).length === 0) {
-      console.log('⏸️ Сохранение отменено: данные пусты');
+    // Не сохраняем пустой объект только до первой загрузки
+    // После загрузки (hasLoadedFromServer = true) сохраняем всегда, даже пустой объект (для первого пользователя)
+    if (!hasLoadedFromServer && Object.keys(data).length === 0) {
+      console.log('⏸️ Сохранение отменено: данные пусты и еще не загружены');
       return;
     }
+    
+    // Если hasLoadedFromServer = true, мы сохраняем в любом случае (даже для первого пользователя)
 
     console.log('✅ Все условия пройдены! hasLoadedFromServer =', hasLoadedFromServer, ', запускаю сохранение через 500мс...');
     const timeoutId = setTimeout(() => {
@@ -754,6 +762,7 @@ const App: React.FC = () => {
       const newData = updater(prev);
       console.log('🔄 Стейт обновлен:', newData);
       console.log('📋 Ключи в обновленных данных:', Object.keys(newData));
+      console.log('📝 Новое значение в стейте:', JSON.stringify(newData).substring(0, 200) + '...');
       return newData;
     });
   };
@@ -761,7 +770,14 @@ const App: React.FC = () => {
   const updateSingle = (owner: string, pId: string, updated: Project) => {
     console.log('🔄 updateSingle вызван:', { owner, pId, updatedName: updated.name });
     handleUpdate(prev => {
-      const newData = { ...prev, [owner]: { projects: prev[owner].projects.map(p => p.id === pId ? updated : p) } };
+      const userData = prev[owner] || { projects: [] };
+      const projectExists = userData.projects.some(p => p.id === pId);
+      const newProjects = projectExists 
+        ? userData.projects.map(p => p.id === pId ? updated : p)
+        : [...userData.projects, updated];
+      const newData = { ...prev, [owner]: { projects: newProjects } };
+      console.log('📝 Новое значение в стейте (updateSingle):', newData);
+      console.log('📋 Проектов у пользователя:', newProjects.length);
       return newData;
     });
   };
@@ -775,7 +791,9 @@ const App: React.FC = () => {
     console.log('🔄 updateUserProjects вызван:', { owner, projectsCount: projects.length });
     handleUpdate(prev => {
       const newData = { ...prev, [owner]: { projects } };
-      console.log('🔄 Стейт обновлен (updateUserProjects):', newData);
+      console.log('📝 Новое значение в стейте (updateUserProjects):', newData);
+      console.log('📋 Всего пользователей:', Object.keys(newData).length);
+      console.log('📋 Проектов у пользователя', owner, ':', projects.length);
       return newData;
     });
   };
