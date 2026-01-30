@@ -1695,11 +1695,23 @@ const App: React.FC = () => {
       const newData = { ...prev };
       newData[owner] = {
         ...newData[owner],
-        projects: updatedProjects.map(p => ({
-          ...p,
-          leads: { ...(p.leads || {}) }, // Гарантия копирования
-          weeks: { ...(p.weeks || {}) }
-        }))
+        projects: updatedProjects.map(p => {
+          // Глубокое копирование weeks с bundles
+          const weeksCopy: Record<string, WeeklyStats> = {};
+          Object.entries(p.weeks || {}).forEach(([weekId, stats]) => {
+            weeksCopy[weekId] = {
+              ...stats,
+              bundles: stats.bundles ? [...stats.bundles] : undefined
+            };
+          });
+          
+          return {
+            ...p,
+            leads: { ...(p.leads || {}) },
+            weeks: weeksCopy,
+            bundles: p.bundles ? [...p.bundles] : undefined // Также сохраняем старые bundles
+          };
+        })
       };
       
       console.log('✅ updateUserProjects: данные подготовлены для', owner);
