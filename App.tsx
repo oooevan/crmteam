@@ -1257,36 +1257,94 @@ const App: React.FC = () => {
   }
 
   // --- Login View ---
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+
+  // Учётные данные пользователей
+  const CREDENTIALS: Record<string, { password: string; role: Role; displayName: string }> = {
+    'admin': { password: 'fromi2024', role: 'Admin', displayName: 'Admin' },
+    'alena': { password: 'target_a1', role: 'Targetologist', displayName: 'Алена' },
+    'denis': { password: 'target_d2', role: 'Targetologist', displayName: 'Денис' },
+    'alexey': { password: 'target_x3', role: 'Targetologist', displayName: 'Алексей' },
+    'sergey': { password: 'target_s4', role: 'Targetologist', displayName: 'Сергей' },
+    'anastasia': { password: 'target_n5', role: 'Targetologist', displayName: 'Анастасия' },
+  };
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    const username = loginUsername.toLowerCase().trim();
+    const user = CREDENTIALS[username];
+    
+    if (!user) {
+      setLoginError('Пользователь не найден');
+      return;
+    }
+    
+    if (user.password !== loginPassword) {
+      setLoginError('Неверный пароль');
+      return;
+    }
+    
+    setLoginError('');
+    setCurrentUser({ role: user.role, name: user.displayName });
+  };
+
   if (!currentUser) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden bg-black text-white">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-indigo-900/20 via-black to-black animate-pulse" />
         <GlassCard className="w-full max-w-md p-10 bg-black/60 border-white/10 relative z-10 backdrop-blur-2xl shadow-[0_0_50px_-10px_rgba(79,70,229,0.3)]">
-          <div className="text-center mb-12">
+          <div className="text-center mb-10">
             <div className="w-20 h-20 bg-gradient-to-tr from-indigo-600 to-purple-600 rounded-3xl mx-auto flex items-center justify-center mb-6 shadow-lg shadow-indigo-500/30">
               <TrendingUp className="text-white w-10 h-10" />
             </div>
             <h1 className="text-4xl font-extrabold tracking-tight mb-2">FROMI CRM</h1>
             <p className="text-indigo-300 font-medium">Маркетинговая экосистема 2.0</p>
           </div>
-          <div className="space-y-4">
-            <button onClick={() => setCurrentUser({ role: 'Admin', name: 'Admin' })} className="w-full p-5 rounded-2xl border border-white/10 bg-white/5 hover:bg-indigo-600/20 hover:border-indigo-500 transition-all flex items-center justify-between group">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-indigo-500/20 rounded-xl text-indigo-300"><LayoutDashboard size={24} /></div>
-                <div className="text-left"><p className="text-white font-bold">Администратор</p><p className="text-xs text-gray-500">Полный доступ к статистике</p></div>
-              </div>
-              <ChevronRight className="text-gray-600 group-hover:text-white transition-colors" />
-            </button>
-            <div className="pt-6">
-              <p className="text-xs font-bold text-gray-600 uppercase tracking-widest mb-4">Команда</p>
-              <div className="grid grid-cols-2 gap-3">
-                {TARGETOLOGISTS.map((name) => (
-                  <button key={name} onClick={() => setCurrentUser({ role: 'Targetologist', name })} className="p-3 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 hover:border-white/20 transition-all text-sm font-medium text-gray-300 hover:text-white hover:shadow-[0_0_15px_-5px_rgba(255,255,255,0.1)]">
-                    {name}
-                  </button>
-                ))}
-              </div>
+          
+          <form onSubmit={handleLogin} className="space-y-5">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Логин</label>
+              <input
+                type="text"
+                value={loginUsername}
+                onChange={(e) => { setLoginUsername(e.target.value); setLoginError(''); }}
+                className="w-full p-4 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:bg-white/10 transition-all"
+                placeholder="Введите логин"
+                autoComplete="username"
+              />
             </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Пароль</label>
+              <input
+                type="password"
+                value={loginPassword}
+                onChange={(e) => { setLoginPassword(e.target.value); setLoginError(''); }}
+                className="w-full p-4 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:bg-white/10 transition-all"
+                placeholder="Введите пароль"
+                autoComplete="current-password"
+              />
+            </div>
+            
+            {loginError && (
+              <div className="p-3 bg-rose-500/20 border border-rose-500/30 rounded-xl text-rose-400 text-sm text-center">
+                {loginError}
+              </div>
+            )}
+            
+            <button
+              type="submit"
+              className="w-full p-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50"
+            >
+              Войти
+            </button>
+          </form>
+          
+          <div className="mt-8 pt-6 border-t border-white/5">
+            <p className="text-xs text-gray-600 text-center">
+              Введите логин и пароль для входа в систему
+            </p>
           </div>
         </GlassCard>
       </div>
