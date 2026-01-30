@@ -1096,8 +1096,26 @@ const TargetologistWorkspace: React.FC<{
   const [showBundlesSummary, setShowBundlesSummary] = useState(false);
   const [bundlesViewMode, setBundlesViewMode] = useState<'week' | 'month'>('week');
   const [bundlesWeekIndex, setBundlesWeekIndex] = useState(WEEKS_LIST.findIndex(w => w.id === weekStart));
+  const [bundlesMonthIndex, setBundlesMonthIndex] = useState(() => new Date().getMonth()); // Текущий месяц
   
   const bundlesWeek = WEEKS_LIST[bundlesWeekIndex] || WEEKS_LIST[0];
+  
+  // Список месяцев для выбора
+  const MONTHS_LIST = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    return [
+      { id: 0, year: currentYear - 1, label: 'Декабрь ' + (currentYear - 1), month: 11, monthYear: currentYear - 1 },
+      ...Array.from({ length: 12 }, (_, i) => ({
+        id: i + 1,
+        year: currentYear,
+        label: new Date(currentYear, i, 1).toLocaleString('ru-RU', { month: 'long' }) + ' ' + currentYear,
+        month: i,
+        monthYear: currentYear
+      }))
+    ];
+  }, []);
+  
+  const bundlesMonth = MONTHS_LIST[bundlesMonthIndex] || MONTHS_LIST[1]; // По умолчанию январь текущего года
 
   // Расчёт сводной таблицы связок за неделю
   const weeklyBundlesSummary = useMemo(() => {
@@ -1135,11 +1153,8 @@ const TargetologistWorkspace: React.FC<{
     const bundlesByName: Record<string, Record<string, number>> = {};
     const targetologists = Object.keys(allData);
     
-    // Определяем текущий месяц из bundlesWeek
-    const weekDate = new Date(bundlesWeek.id);
-    const year = weekDate.getFullYear();
-    const month = weekDate.getMonth();
-    const mondays = getMondaysInMonth(year, month);
+    // Используем выбранный месяц
+    const mondays = getMondaysInMonth(bundlesMonth.monthYear, bundlesMonth.month);
     
     Object.entries(allData).forEach(([owner, userData]) => {
       const user = userData as UserData;
@@ -1166,12 +1181,8 @@ const TargetologistWorkspace: React.FC<{
       return { bundleName, values, total };
     }).sort((a, b) => b.total - a.total).slice(0, 15);
 
-    // Определяем название месяца
-    const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
-    const monthLabel = `${monthNames[month]} ${year}`;
-
-    return { rows, targetologists, monthLabel };
-  }, [allData, bundlesWeek.id]);
+    return { rows, targetologists, monthLabel: bundlesMonth.label };
+  }, [allData, bundlesMonth]);
 
   const currentBundlesSummary = bundlesViewMode === 'week' ? weeklyBundlesSummary : monthlyBundlesSummaryForTargetologist;
 
@@ -1242,8 +1253,24 @@ const TargetologistWorkspace: React.FC<{
           )}
 
           {bundlesViewMode === 'month' && (
-            <div className="px-4 py-2 bg-amber-900/30 border border-amber-500/30 rounded-lg text-amber-300 font-medium">
-              {monthlyBundlesSummaryForTargetologist.monthLabel}
+            <div className="flex items-center gap-2 bg-amber-900/30 rounded-lg border border-amber-500/30 p-1">
+              <button 
+                onClick={() => setBundlesMonthIndex(Math.max(0, bundlesMonthIndex - 1))}
+                disabled={bundlesMonthIndex === 0}
+                className="p-2 text-amber-400 hover:text-amber-200 disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <div className="px-4 text-sm font-bold text-amber-300 min-w-[140px] text-center capitalize">
+                {monthlyBundlesSummaryForTargetologist.monthLabel}
+              </div>
+              <button 
+                onClick={() => setBundlesMonthIndex(Math.min(MONTHS_LIST.length - 1, bundlesMonthIndex + 1))}
+                disabled={bundlesMonthIndex === MONTHS_LIST.length - 1}
+                className="p-2 text-amber-400 hover:text-amber-200 disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <ChevronRight size={18} />
+              </button>
             </div>
           )}
         </div>
