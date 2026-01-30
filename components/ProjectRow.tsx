@@ -112,6 +112,12 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({
     return 'bg-rose-500';
   };
 
+  // Форматирование числа с символом рубля
+  const formatRubleValue = (value: number | undefined): string => {
+    if (!value) return '';
+    return value.toString();
+  };
+
   return (
     <tr className={`${rowBgClass} hover:bg-white/[0.05] transition-colors group`}>
       {ownerName && (
@@ -149,7 +155,7 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({
         );
       })}
 
-      {/* Итого - с жирным разделителем справа */}
+      {/* Итого - выделенный столбец */}
       <td className={`${cellClass} text-center font-bold text-emerald-300 border-r-2 border-r-white/20 bg-emerald-900/20`}>
         <span className="text-base">{weeklyLeadsCount}</span>
       </td>
@@ -184,26 +190,32 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({
 
       {/* Бюджет */}
       <td className={`${cellClass}`}>
-        <input 
-          type="number" 
-          value={currentStats.budget || ''} 
-          onChange={(e) => handleStatChange('budget', parseFloat(e.target.value))}
-          style={getInputWidth(currentStats.budget, 4)}
-          className={`${inputClass} text-gray-400 text-sm`}
-          placeholder="₽"
-        />
+        <div className="flex items-center justify-center gap-0.5">
+          <input 
+            type="number" 
+            value={currentStats.budget || ''} 
+            onChange={(e) => handleStatChange('budget', parseFloat(e.target.value))}
+            style={getInputWidth(currentStats.budget, 4)}
+            className={`${inputClass} text-gray-400 text-sm`}
+            placeholder="0"
+          />
+          {currentStats.budget > 0 && <span className="text-gray-500 text-xs">₽</span>}
+        </div>
       </td>
 
       {/* Открут */}
       <td className={`${cellClass}`}>
-        <input 
-          type="number" 
-          value={currentStats.spend || ''} 
-          onChange={(e) => handleStatChange('spend', parseFloat(e.target.value))}
-          style={getInputWidth(currentStats.spend, 4)}
-          className={`${inputClass} text-white text-sm`}
-          placeholder="₽"
-        />
+        <div className="flex items-center justify-center gap-0.5">
+          <input 
+            type="number" 
+            value={currentStats.spend || ''} 
+            onChange={(e) => handleStatChange('spend', parseFloat(e.target.value))}
+            style={getInputWidth(currentStats.spend, 4)}
+            className={`${inputClass} text-white text-sm`}
+            placeholder="0"
+          />
+          {currentStats.spend > 0 && <span className="text-gray-400 text-xs">₽</span>}
+        </div>
       </td>
 
       {/* CPL */}
@@ -246,18 +258,21 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({
               />
             </td>
             <td className={`${cellClass} ${isLastBundle ? 'border-r-2 border-r-white/20' : ''}`}>
-              <input
-                type="number"
-                value={bundle?.unscrew || ''}
-                onChange={(e) => {
-                  const newBundles = [...(project.bundles || [])];
-                  newBundles[index] = { bundle: bundle?.bundle || '', unscrew: parseFloat(e.target.value) || 0 };
-                  onUpdate(project.id, { ...project, bundles: newBundles });
-                }}
-                style={getInputWidth(bundle?.unscrew, 3)}
-                className={`${inputClass} text-indigo-300 text-sm`}
-                placeholder="₽"
-              />
+              <div className="flex items-center justify-center gap-0.5">
+                <input
+                  type="number"
+                  value={bundle?.unscrew || ''}
+                  onChange={(e) => {
+                    const newBundles = [...(project.bundles || [])];
+                    newBundles[index] = { bundle: bundle?.bundle || '', unscrew: parseFloat(e.target.value) || 0 };
+                    onUpdate(project.id, { ...project, bundles: newBundles });
+                  }}
+                  style={getInputWidth(bundle?.unscrew, 3)}
+                  className={`${inputClass} text-indigo-300 text-sm`}
+                  placeholder="0"
+                />
+                {bundle?.unscrew > 0 && <span className="text-indigo-400/50 text-xs">₽</span>}
+              </div>
             </td>
           </React.Fragment>
         );
