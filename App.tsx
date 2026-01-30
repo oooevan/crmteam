@@ -762,7 +762,7 @@ const AdminDashboard: React.FC<{
             Динамика месяца (Таргетологи)
           </h3>
           <span className="text-xs text-gray-400 bg-black/20 px-2 py-1 rounded">
-            {MONTHS.find(m => m.id === currentMonth.id)?.name} {currentMonth.year}
+            {currentMonth.label}
           </span>
         </div>
         <div className="table-scroll-container overflow-auto max-h-[500px]">
