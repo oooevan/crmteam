@@ -1343,15 +1343,8 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 md:gap-6">
-             {/* Индикатор Realtime подключения */}
-             <div className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-lg text-xs font-medium transition-all ${
-               realtimeConnected 
-                 ? 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-400' 
-                 : 'bg-rose-500/20 border border-rose-500/30 text-rose-400'
-             }`}>
-               <div className={`w-2 h-2 rounded-full ${realtimeConnected ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
-               <span className="hidden md:inline">{realtimeConnected ? 'Синхронизация' : 'Нет связи'}</span>
-             </div>
+             {/* Индикатор Realtime подключения - только точка */}
+             <div className={`w-2.5 h-2.5 rounded-full ${realtimeConnected ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} title={realtimeConnected ? 'Синхронизация активна' : 'Нет связи'} />
              <div className="text-right hidden md:block">
                 <p className="text-sm font-bold text-white">{currentUser.name}</p>
                 <div className="flex items-center gap-1 justify-end">
