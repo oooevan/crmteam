@@ -1096,26 +1096,26 @@ const TargetologistWorkspace: React.FC<{
   const [showBundlesSummary, setShowBundlesSummary] = useState(false);
   const [bundlesViewMode, setBundlesViewMode] = useState<'week' | 'month'>('week');
   const [bundlesWeekIndex, setBundlesWeekIndex] = useState(WEEKS_LIST.findIndex(w => w.id === weekStart));
-  const [bundlesMonthIndex, setBundlesMonthIndex] = useState(() => new Date().getMonth()); // Текущий месяц
+  const [bundlesMonthIndex, setBundlesMonthIndex] = useState(0); // Январь по умолчанию (индекс 0)
   
   const bundlesWeek = WEEKS_LIST[bundlesWeekIndex] || WEEKS_LIST[0];
   
-  // Список месяцев для выбора
+  // Список месяцев для выбора (начиная с января 2026)
   const MONTHS_LIST = useMemo(() => {
-    const currentYear = new Date().getFullYear();
-    return [
-      { id: 0, year: currentYear - 1, label: 'Декабрь ' + (currentYear - 1), month: 11, monthYear: currentYear - 1 },
-      ...Array.from({ length: 12 }, (_, i) => ({
-        id: i + 1,
+    const currentYear = 2026; // Фиксируем год для CRM
+    return Array.from({ length: 12 }, (_, i) => {
+      const monthName = new Date(currentYear, i, 1).toLocaleString('ru-RU', { month: 'long' });
+      return {
+        id: i,
         year: currentYear,
-        label: new Date(currentYear, i, 1).toLocaleString('ru-RU', { month: 'long' }) + ' ' + currentYear,
+        label: monthName.charAt(0).toUpperCase() + monthName.slice(1) + ' ' + currentYear,
         month: i,
         monthYear: currentYear
-      }))
-    ];
+      };
+    });
   }, []);
   
-  const bundlesMonth = MONTHS_LIST[bundlesMonthIndex] || MONTHS_LIST[1]; // По умолчанию январь текущего года
+  const bundlesMonth = MONTHS_LIST[bundlesMonthIndex] || MONTHS_LIST[0]; // Январь по умолчанию
 
   // Расчёт сводной таблицы связок за неделю
   const weeklyBundlesSummary = useMemo(() => {
