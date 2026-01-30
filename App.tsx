@@ -964,6 +964,7 @@ const TargetologistWorkspace: React.FC<{
                   onUpdate={handleUpdate} 
                   onDelete={handleDelete}
                   rowIndex={index}
+                  isPlanEditable={false}
                 />
               ))}
             </tbody>
