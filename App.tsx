@@ -1054,6 +1054,9 @@ const App: React.FC = () => {
   const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
+  
+  // Admin view state - какую таблицу смотрит админ
+  const [adminView, setAdminView] = useState<'dashboard' | string>('dashboard');
 
   // 1. Загрузка данных (без изменений, она у тебя хорошая)
   useEffect(() => {
@@ -1433,10 +1436,51 @@ const App: React.FC = () => {
                 isTargetologist: currentUser.role === 'Targetologist'
               });
               return currentUser.role === 'Admin' ? (
-              <AdminDashboard 
-                data={data} weekStart={currentWeekId}
-                onUpdateProject={updateSingle} onDeleteProject={deleteSingle}
-              />
+              <div>
+                {/* Навигация для админа */}
+                <div className="mb-6 flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setAdminView('dashboard')}
+                    className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                      adminView === 'dashboard'
+                        ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30'
+                        : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    📊 Общая статистика
+                  </button>
+                  {TARGETOLOGISTS.map(name => (
+                    <button
+                      key={name}
+                      onClick={() => setAdminView(name)}
+                      className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                        adminView === name
+                          ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/30'
+                          : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </div>
+                
+                {/* Контент в зависимости от выбора */}
+                {adminView === 'dashboard' ? (
+                  <AdminDashboard 
+                    data={data} weekStart={currentWeekId}
+                    onUpdateProject={updateSingle} onDeleteProject={deleteSingle}
+                  />
+                ) : (
+                  <TargetologistWorkspace 
+                    name={adminView} 
+                    projects={data[adminView]?.projects || []}
+                    weekStart={currentWeekId} 
+                    allData={data}
+                    onUpdateProjects={(p) => updateUserProjects(adminView, p)}
+                    onUpdateBundles={(bundles) => updateUserBundles(adminView, bundles)}
+                  />
+                )}
+              </div>
             ) : (
               <>
                 {console.log('🚨🚨🚨 РЕНДЕРИМ TargetologistWorkspace! 🚨🚨🚨', {
