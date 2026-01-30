@@ -1273,6 +1273,7 @@ const App: React.FC = () => {
     'alexey': { password: 'target_x3', role: 'Targetologist', displayName: 'Алексей' },
     'sergey': { password: 'target_s4', role: 'Targetologist', displayName: 'Сергей' },
     'anastasia': { password: 'target_n5', role: 'Targetologist', displayName: 'Анастасия' },
+    'ivan': { password: 'target_i6', role: 'Targetologist', displayName: 'Иван' },
   };
 
   const handleLogin = (e: React.FormEvent) => {
