@@ -968,6 +968,67 @@ const TargetologistWorkspace: React.FC<{
                 />
               ))}
             </tbody>
+            {/* Строка ИТОГО */}
+            <tfoot className="bg-indigo-900/30 border-t-2 border-indigo-500/50">
+              {(() => {
+                // Подсчёт итогов
+                const dailyTotals = days.map(date => 
+                  projects.reduce((sum, p) => {
+                    const val = p.leads[date];
+                    if (val === NO_BUDGET_VALUE || val === undefined) return sum;
+                    return sum + val;
+                  }, 0)
+                );
+                const weeklyTotal = dailyTotals.reduce((a, b) => a + b, 0);
+                const totalGoal = projects.reduce((sum, p) => {
+                  const wStats = p.weeks[weekStart] || { goal: p.defaultGoal };
+                  return sum + (wStats.goal || 0);
+                }, 0);
+                const totalBudget = projects.reduce((sum, p) => {
+                  const wStats = p.weeks[weekStart] || {};
+                  return sum + (wStats.budget || 0);
+                }, 0);
+                const totalSpend = projects.reduce((sum, p) => {
+                  const wStats = p.weeks[weekStart] || {};
+                  return sum + (wStats.spend || 0);
+                }, 0);
+                const planPercent = totalGoal > 0 ? (weeklyTotal / totalGoal) * 100 : 0;
+                const avgCpl = weeklyTotal > 0 ? totalSpend / weeklyTotal : 0;
+
+                return (
+                  <tr className="text-white font-bold">
+                    <td className="p-2 sticky-col bg-indigo-900/80 backdrop-blur-sm border-r-2 border-r-white/20 text-indigo-200">
+                      Итого
+                    </td>
+                    {dailyTotals.map((total, i) => (
+                      <td key={i} className="p-2 text-center text-indigo-100">{total}</td>
+                    ))}
+                    <td className="p-2 text-center text-emerald-300 bg-emerald-900/30 border-r-2 border-r-white/20 text-lg">
+                      {weeklyTotal}
+                    </td>
+                    <td className="p-2 text-center text-gray-400">{totalGoal}</td>
+                    <td className="p-2 text-center">
+                      <span className={planPercent >= 100 ? 'text-emerald-400' : planPercent >= 70 ? 'text-blue-400' : 'text-amber-400'}>
+                        {planPercent.toFixed(0)}%
+                      </span>
+                    </td>
+                    <td className="p-2 text-center text-gray-400">
+                      {totalBudget > 0 ? `${totalBudget.toLocaleString()} ₽` : ''}
+                    </td>
+                    <td className="p-2 text-center text-white">
+                      {totalSpend > 0 ? `${totalSpend.toLocaleString()} ₽` : ''}
+                    </td>
+                    <td className="p-2 text-center text-indigo-300">
+                      {avgCpl > 0 ? avgCpl.toFixed(0) : '0'}
+                    </td>
+                    <td className="p-2 text-center border-r-2 border-r-white/20"></td>
+                    {/* Пустые ячейки для связок */}
+                    <td colSpan={8} className="p-2 border-r-2 border-r-white/20"></td>
+                    <td className="p-2"></td>
+                  </tr>
+                );
+              })()}
+            </tfoot>
           </table>
         </div>
       </GlassCard>
