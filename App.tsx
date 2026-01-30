@@ -1492,8 +1492,46 @@ const App: React.FC = () => {
       try {
         setIsLoading(true);
         const initialData = await getInitialData();
-        setData(initialData);
+        
+        // Миграция: переносим старые связки из project.bundles в weeks[currentWeek].bundles
+        let needsMigration = false;
+        const migratedData = { ...initialData };
+        const currentWeek = WEEKS_LIST[0].id; // Текущая неделя для миграции
+        
+        Object.entries(migratedData).forEach(([userName, userData]) => {
+          const user = userData as UserData;
+          user.projects?.forEach(project => {
+            // Если есть старые связки в project.bundles, но нет в текущей неделе
+            if (project.bundles && project.bundles.length > 0) {
+              const hasWeekBundles = project.weeks[currentWeek]?.bundles?.length > 0;
+              if (!hasWeekBundles) {
+                // Мигрируем в текущую неделю
+                if (!project.weeks[currentWeek]) {
+                  project.weeks[currentWeek] = {
+                    budget: project.defaultBudget,
+                    spend: 0,
+                    goal: project.defaultGoal,
+                    targetCpa: project.defaultTargetCpa,
+                    bundles: []
+                  };
+                }
+                project.weeks[currentWeek].bundles = [...project.bundles];
+                console.log(`📦 Мигрированы связки для ${userName} - ${project.name}`);
+                needsMigration = true;
+              }
+            }
+          });
+        });
+        
+        setData(migratedData);
         setHasLoadedFromServer(true);
+        
+        // Если была миграция, сохраняем
+        if (needsMigration) {
+          console.log('💾 Сохраняем мигрированные данные...');
+          await saveData(migratedData);
+        }
+        
         console.log('📥 Первичная загрузка завершена');
       } catch (error) {
         console.error('❌ Ошибка загрузки:', error);

@@ -114,7 +114,7 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({
   };
 
   // Связки текущей недели
-  const weekBundles = currentStats.bundles || [];
+  const weekBundles = currentStats.bundles || project.bundles || [];
 
   return (
     <tr className={`${rowBgClass} hover:bg-white/[0.05] transition-colors group`}>
