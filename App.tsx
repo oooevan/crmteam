@@ -1049,6 +1049,11 @@ const App: React.FC = () => {
   const [hasLoadedFromServer, setHasLoadedFromServer] = useState(false);
   const [realtimeConnected, setRealtimeConnected] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  
+  // Login state - должны быть вверху компонента
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
 
   // 1. Загрузка данных (без изменений, она у тебя хорошая)
   useEffect(() => {
@@ -1257,10 +1262,6 @@ const App: React.FC = () => {
   }
 
   // --- Login View ---
-  const [loginUsername, setLoginUsername] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
-  const [loginError, setLoginError] = useState('');
-
   // Учётные данные пользователей
   const CREDENTIALS: Record<string, { password: string; role: Role; displayName: string }> = {
     'admin': { password: 'fromi2024', role: 'Admin', displayName: 'Admin' },
