@@ -33,7 +33,9 @@ import {
   TARGETOLOGISTS, 
   AppData, 
   Project,
-  UserData
+  UserData,
+  WeeklyStats,
+  BundleEntry
 } from './types';
 import { getInitialData, saveData, subscribeToDataChanges } from './services/storage';
 import { GlassCard } from './components/ui/GlassCard';
@@ -188,18 +190,31 @@ const AdminDashboard: React.FC<{
   onUpdateProject: (owner: string, projectId: string, updated: Project) => void;
   onDeleteProject: (owner: string, projectId: string) => void;
 }> = ({ data, weekStart, onUpdateProject, onDeleteProject }) => {
+  console.log('🎯 AdminDashboard рендерится:', { 
+    dataKeys: Object.keys(data),
+    usersCount: Object.keys(data).length,
+    users: Object.keys(data).map(key => ({ name: key, projectsCount: data[key]?.projects?.length || 0 }))
+  });
+  
   const days = useMemo(() => getWeekDays(new Date(weekStart)).map(d => d.iso), [weekStart]);
   const [selectedMonthIndex, setSelectedMonthIndex] = useState(0);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'leads', direction: 'desc' });
 
-  // --- Statistics Logic ---
+  // Константа для "нет бюджета"
+  const NO_BUDGET_VALUE = -1;
+
+  // --- Statistics Logic (игнорируем дни с "н") ---
   const stats = useMemo(() => {
     let totalLeads = 0, totalSpend = 0, totalGoal = 0;
     const memberPerformance = Object.entries(data).map(([name, userData]) => {
       const user = userData as UserData;
       let mLeads = 0, mSpend = 0, mGoal = 0;
       user.projects.forEach(p => {
-        const pLeads = days.reduce((acc, date) => acc + (p.leads[date] || 0), 0);
+        const pLeads = days.reduce((acc, date) => {
+          const val = p.leads[date];
+          if (val === NO_BUDGET_VALUE || val === undefined) return acc;
+          return acc + val;
+        }, 0);
         const wStats = p.weeks[weekStart] || { spend: 0, goal: p.defaultGoal };
         mLeads += pLeads;
         mSpend += (wStats.spend || 0);
@@ -214,7 +229,7 @@ const AdminDashboard: React.FC<{
     return { totalLeads, totalSpend, avgCpa: totalLeads > 0 ? totalSpend / totalLeads : 0, memberPerformance, totalGoal };
   }, [data, days, weekStart]);
 
-  // --- Dynamics Table Logic ---
+  // --- Dynamics Table Logic (игнорируем дни с "н") ---
   const dynamicsData = useMemo(() => {
     const prevWeekIndex = WEEKS_LIST.findIndex(w => w.id === weekStart) - 1;
     const prevWeekStart = prevWeekIndex >= 0 ? WEEKS_LIST[prevWeekIndex].id : null;
@@ -222,16 +237,23 @@ const AdminDashboard: React.FC<{
 
     const rows = Object.entries(data).map(([name, userData]) => {
       let currentFact = 0, currentPlan = 0, currentBudget = 0;
-      const dailyFacts: number[] = days.map(() => 0);
+      const dailyFacts: (number | string)[] = days.map(() => 0);
 
       let prevFact = 0, prevBudget = 0;
 
       (userData as UserData).projects.forEach(p => {
         // Current Week Stats
         days.forEach((d, idx) => {
-          const val = (p.leads[d] || 0);
-          dailyFacts[idx] += val;
-          currentFact += val;
+          const val = p.leads[d];
+          if (val === NO_BUDGET_VALUE) {
+            // Если хотя бы один проект имеет "н", показываем "н"
+            dailyFacts[idx] = dailyFacts[idx] === 0 ? 'н' : dailyFacts[idx];
+          } else if (val !== undefined && val !== NO_BUDGET_VALUE) {
+            if (dailyFacts[idx] !== 'н') {
+              dailyFacts[idx] = (dailyFacts[idx] as number) + val;
+            }
+            currentFact += val;
+          }
         });
         const wStats = p.weeks[weekStart] || { goal: p.defaultGoal, spend: 0 };
         currentPlan += (wStats.goal || 0);
@@ -239,7 +261,12 @@ const AdminDashboard: React.FC<{
 
         // Previous Week Stats (for Delta)
         if (prevWeekStart) {
-          prevDays.forEach(d => prevFact += (p.leads[d] || 0));
+          prevDays.forEach(d => {
+            const val = p.leads[d];
+            if (val !== NO_BUDGET_VALUE && val !== undefined) {
+              prevFact += val;
+            }
+          });
           const prevWStats = p.weeks[prevWeekStart] || { spend: 0 };
           prevBudget += (prevWStats.spend || 0);
         }
@@ -268,14 +295,19 @@ const AdminDashboard: React.FC<{
       };
     }).sort((a, b) => b.currentFact - a.currentFact);
 
-    // Totals for footer
-    const totals = rows.reduce((acc: { dailyFacts: number[]; currentFact: number; currentPlan: number; currentBudget: number }, row) => ({
-      dailyFacts: acc.dailyFacts.map((v, i) => v + row.dailyFacts[i]),
+    // Totals for footer (dailyFacts может содержать числа или 'н')
+    const totals = rows.reduce((acc: { dailyFacts: (number | string)[]; currentFact: number; currentPlan: number; currentBudget: number }, row) => ({
+      dailyFacts: acc.dailyFacts.map((v, i) => {
+        const rowVal = row.dailyFacts[i];
+        if (rowVal === 'н') return v === 0 ? 'н' : v;
+        if (v === 'н') return v;
+        return (v as number) + (rowVal as number);
+      }),
       currentFact: acc.currentFact + row.currentFact,
       currentPlan: acc.currentPlan + row.currentPlan,
       currentBudget: acc.currentBudget + row.currentBudget,
     }), { 
-      dailyFacts: [0,0,0,0,0,0,0] as number[], 
+      dailyFacts: [0,0,0,0,0,0,0] as (number | string)[], 
       currentFact: 0, 
       currentPlan: 0, 
       currentBudget: 0 
@@ -296,14 +328,24 @@ const AdminDashboard: React.FC<{
   const currentMonth = months[selectedMonthIndex];
 
   const monthlyProjects = useMemo(() => {
+    console.log('📊 monthlyProjects вычисляется:', { 
+      dataKeys: Object.keys(data),
+      dataEntries: Object.entries(data).map(([key, val]) => ({ owner: key, projectsCount: (val as UserData)?.projects?.length || 0 }))
+    });
+    
     const list: { owner: string; project: Project; leads: number; goal: number; budget: number; spend: number; actualCpa: number; avgTargetCpa: number; percent: number }[] = [];
     Object.entries(data).forEach(([owner, userData]) => {
-      (userData as UserData).projects.forEach(project => {
+      const projects = (userData as UserData).projects || [];
+      console.log(`📋 Обработка пользователя ${owner}:`, { projectsCount: projects.length });
+      projects.forEach(project => {
         let leads = 0, goal = 0, budget = 0, spend = 0, targetCpaSum = 0, weeksCount = 0;
         
         Object.entries(project.leads).forEach(([date, count]) => {
             const d = new Date(date);
-            if (d.getMonth() === currentMonth.id && d.getFullYear() === currentMonth.year) leads += Number(count);
+            // Игнорируем дни с "н" (NO_BUDGET_VALUE = -1)
+            if (d.getMonth() === currentMonth.id && d.getFullYear() === currentMonth.year && Number(count) !== NO_BUDGET_VALUE) {
+              leads += Number(count);
+            }
         });
 
         getMondaysInMonth(currentMonth.year, currentMonth.id).forEach(m => {
@@ -333,16 +375,69 @@ const AdminDashboard: React.FC<{
     });
   }, [data, currentMonth, sortConfig]);
 
+  // --- Сводная таблица связок ---
+  const bundlesSummary = useMemo(() => {
+    // Собираем все связки от всех таргетологов
+    const bundlesByName: Record<string, Record<string, number>> = {};
+    const targetologists = Object.keys(data);
+    
+    Object.entries(data).forEach(([owner, userData]) => {
+      const user = userData as UserData;
+      // Собираем связки из проектов
+      user.projects?.forEach(project => {
+        project.bundles?.forEach(bundle => {
+          if (bundle.bundle && bundle.bundle.trim()) {
+            const bundleName = bundle.bundle.trim();
+            if (!bundlesByName[bundleName]) {
+              bundlesByName[bundleName] = {};
+              targetologists.forEach(t => bundlesByName[bundleName][t] = 0);
+            }
+            bundlesByName[bundleName][owner] = (bundlesByName[bundleName][owner] || 0) + (bundle.unscrew || 0);
+          }
+        });
+      });
+    });
+
+    // Преобразуем в массив и сортируем по итого
+    const rows = Object.entries(bundlesByName).map(([bundleName, values]) => {
+      const total = Object.values(values).reduce((sum, v) => sum + v, 0);
+      return { bundleName, values, total };
+    }).sort((a, b) => b.total - a.total);
+
+    return { rows, targetologists };
+  }, [data]);
+
   const handleUpdateMonthlyGoal = (owner: string, project: Project, newMonthlyGoal: number) => {
     console.log('📝 handleUpdateMonthlyGoal вызван:', { owner, projectId: project.id, newMonthlyGoal });
+    console.log('📝 Текущий проект перед обновлением:', {
+      id: project.id,
+      name: project.name,
+      leadsCount: Object.keys(project.leads || {}).length,
+      weeksCount: Object.keys(project.weeks || {}).length,
+      leads: project.leads,
+      weeks: project.weeks
+    });
     const mondays = getMondaysInMonth(currentMonth.year, currentMonth.id);
     if (mondays.length === 0) return;
     const weeklyGoal = Math.round(newMonthlyGoal / mondays.length);
-    const updated = { ...project, weeks: { ...project.weeks }, defaultGoal: weeklyGoal };
+    // ВАЖНО: Сохраняем leads при обновлении!
+    const updated = { 
+      ...project, 
+      leads: { ...project.leads }, // Явно копируем leads
+      weeks: { ...project.weeks }, 
+      defaultGoal: weeklyGoal 
+    };
     mondays.forEach(m => {
         updated.weeks[m] = { ...(updated.weeks[m] || { budget: project.defaultBudget, spend: 0, targetCpa: project.defaultTargetCpa }), goal: weeklyGoal };
     });
-    console.log('📝 Обновленный проект перед передачей в onUpdateProject:', updated);
+    console.log('📝 Обновленный проект перед передачей в onUpdateProject:', {
+      id: updated.id,
+      name: updated.name,
+      leadsCount: Object.keys(updated.leads || {}).length,
+      weeksCount: Object.keys(updated.weeks || {}).length,
+      leads: updated.leads,
+      weeks: updated.weeks
+    });
     onUpdateProject(owner, project.id, updated);
   };
 
@@ -390,35 +485,37 @@ const AdminDashboard: React.FC<{
             </h3>
             <span className="text-xs text-gray-400 bg-black/20 px-2 py-1 rounded">{WEEKS_LIST.find(w => w.id === weekStart)?.label}</span>
           </div>
-          <div className="flex-1 overflow-auto">
-            <table className="w-full text-xs text-left border-collapse">
+          <div className="flex-1 table-scroll-container overflow-auto">
+            <table className="w-full text-xs text-left border-collapse mobile-table">
               <thead className="bg-white/5 sticky top-0 z-10 text-gray-400 font-medium">
                 <tr>
-                  <th className="p-2 min-w-[100px] border-b border-white/10">Таргетолог</th>
-                  {['ПН','ВТ','СР','ЧТ','ПТ','СБ','ВС'].map(d => <th key={d} className="p-2 text-center border-b border-white/10 w-[40px]">{d}</th>)}
-                  <th className="p-2 text-center border-b border-white/10 bg-emerald-900/10 text-emerald-400 font-bold">Факт</th>
-                  <th className="p-2 text-center border-b border-white/10">План</th>
-                  <th className="p-2 text-center border-b border-white/10 bg-gray-800/50">Бюджет</th>
-                  <th className="p-2 text-center border-b border-white/10">CPL</th>
-                  <th className="p-2 text-center border-b border-white/10" title="Динамика CPL">Δ CPL</th>
-                  <th className="p-2 text-center border-b border-white/10" title="Динамика Бюджета">Δ Бдж</th>
-                  <th className="p-2 text-center border-b border-white/10" title="Динамика Факта">Δ Факт</th>
-                  <th className="p-2 text-center border-b border-white/10">План %</th>
+                  <th className="p-1.5 md:p-2 border-b border-white/10 min-w-[80px] md:min-w-[120px] sticky-col bg-slate-900/95 backdrop-blur-sm">Таргетолог</th>
+                  {['ПН','ВТ','СР','ЧТ','ПТ','СБ','ВС'].map(d => <th key={d} className="p-1.5 md:p-2 text-center border-b border-white/10 min-w-[40px] md:min-w-[60px]">{d}</th>)}
+                  <th className="p-1.5 md:p-2 text-center border-b border-white/10 bg-emerald-900/10 text-emerald-400 font-bold min-w-[50px] md:min-w-[70px]">Факт</th>
+                  <th className="p-1.5 md:p-2 text-center border-b border-white/10 min-w-[50px] md:min-w-[70px]">План</th>
+                  <th className="p-1.5 md:p-2 text-center border-b border-white/10 bg-gray-800/50 min-w-[70px] md:min-w-[100px]">Бюджет</th>
+                  <th className="p-1.5 md:p-2 text-center border-b border-white/10 min-w-[50px] md:min-w-[70px]">CPL</th>
+                  <th className="p-1.5 md:p-2 text-center border-b border-white/10 min-w-[50px] md:min-w-[70px]" title="Динамика CPL">Δ CPL</th>
+                  <th className="p-1.5 md:p-2 text-center border-b border-white/10 min-w-[50px] md:min-w-[70px]" title="Динамика Бюджета">Δ Бдж</th>
+                  <th className="p-1.5 md:p-2 text-center border-b border-white/10 min-w-[50px] md:min-w-[70px]" title="Динамика Факта">Δ Факт</th>
+                  <th className="p-1.5 md:p-2 text-center border-b border-white/10 min-w-[50px] md:min-w-[70px]">План %</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {dynamicsData.rows.map(row => (
-                  <tr key={row.name} className="hover:bg-white/5 transition-colors">
-                    <td className="p-2 font-medium text-white">{row.name}</td>
-                    {row.dailyFacts.map((v, i) => <td key={i} className="p-2 text-center text-gray-400">{v}</td>)}
-                    <td className="p-2 text-center font-bold text-emerald-400 bg-emerald-900/10 border-l border-r border-white/5">{row.currentFact}</td>
-                    <td className="p-2 text-center text-gray-400">{row.currentPlan}</td>
-                    <td className="p-2 text-center text-gray-300 bg-gray-800/30">{row.currentBudget.toLocaleString()}</td>
-                    <td className="p-2 text-center font-medium">{row.currentCPL.toFixed(0)}</td>
-                    <td className={`p-2 text-center ${row.deltaCPL > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>{row.deltaCPL.toFixed(0)}%</td>
-                    <td className={`p-2 text-center ${row.deltaBudget > 0 ? 'text-gray-200' : 'text-gray-500'}`}>{row.deltaBudget.toFixed(0)}%</td>
-                    <td className={`p-2 text-center ${row.deltaFact > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{row.deltaFact.toFixed(0)}%</td>
-                    <td className="p-2 text-center font-bold text-white relative">
+                {dynamicsData.rows.map((row, rowIdx) => (
+                  <tr key={row.name} className={`${rowIdx % 2 === 0 ? 'bg-slate-900/40' : 'bg-slate-800/40'} hover:bg-white/5 transition-colors`}>
+                    <td className={`p-1.5 md:p-2 font-medium text-white min-w-[80px] md:min-w-[120px] sticky-col ${rowIdx % 2 === 0 ? 'bg-slate-900/95' : 'bg-slate-800/95'} backdrop-blur-sm`}>{row.name}</td>
+                    {row.dailyFacts.map((v, i) => (
+                      <td key={i} className={`p-1.5 md:p-2 text-center ${v === 'н' ? 'bg-rose-500/20 text-rose-400 font-bold' : 'text-gray-400'}`}>{v}</td>
+                    ))}
+                    <td className="p-1.5 md:p-2 text-center font-bold text-emerald-400 bg-emerald-900/10 border-l border-r border-white/5">{row.currentFact}</td>
+                    <td className="p-1.5 md:p-2 text-center text-gray-400">{row.currentPlan}</td>
+                    <td className="p-1.5 md:p-2 text-center text-gray-300 bg-gray-800/30">{row.currentBudget.toLocaleString()}</td>
+                    <td className="p-1.5 md:p-2 text-center font-medium">{row.currentCPL.toFixed(0)}</td>
+                    <td className={`p-1.5 md:p-2 text-center ${row.deltaCPL > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>{row.deltaCPL.toFixed(0)}%</td>
+                    <td className={`p-1.5 md:p-2 text-center ${row.deltaBudget > 0 ? 'text-gray-200' : 'text-gray-500'}`}>{row.deltaBudget.toFixed(0)}%</td>
+                    <td className={`p-1.5 md:p-2 text-center ${row.deltaFact > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{row.deltaFact.toFixed(0)}%</td>
+                    <td className="p-1.5 md:p-2 text-center font-bold text-white relative">
                       <div className="absolute inset-0 bg-indigo-500/10 z-0" style={{ width: `${Math.min(row.planPercent, 100)}%` }} />
                       <span className="relative z-10">{row.planPercent.toFixed(0)}%</span>
                     </td>
@@ -427,14 +524,16 @@ const AdminDashboard: React.FC<{
               </tbody>
               <tfoot className="bg-indigo-900/20 font-bold text-white border-t border-indigo-500/30 sticky bottom-0">
                 <tr>
-                  <td className="p-2">ИТОГО</td>
-                  {dynamicsData.totals.dailyFacts.map((v, i) => <td key={i} className="p-2 text-center">{v}</td>)}
-                  <td className="p-2 text-center text-emerald-300 bg-emerald-900/20 border-x border-indigo-500/30">{dynamicsData.totals.currentFact}</td>
-                  <td className="p-2 text-center">{dynamicsData.totals.currentPlan}</td>
-                  <td className="p-2 text-center">{dynamicsData.totals.currentBudget.toLocaleString()}</td>
-                  <td className="p-2 text-center">{dynamicsData.totalCPL.toFixed(0)}</td>
+                  <td className="p-1.5 md:p-2 sticky-col bg-indigo-900/80 backdrop-blur-sm">ИТОГО</td>
+                  {dynamicsData.totals.dailyFacts.map((v, i) => (
+                    <td key={i} className={`p-1.5 md:p-2 text-center ${v === 'н' ? 'bg-rose-500/20 text-rose-400' : ''}`}>{v}</td>
+                  ))}
+                  <td className="p-1.5 md:p-2 text-center text-emerald-300 bg-emerald-900/20 border-x border-indigo-500/30">{dynamicsData.totals.currentFact}</td>
+                  <td className="p-1.5 md:p-2 text-center">{dynamicsData.totals.currentPlan}</td>
+                  <td className="p-1.5 md:p-2 text-center">{dynamicsData.totals.currentBudget.toLocaleString()}</td>
+                  <td className="p-1.5 md:p-2 text-center">{dynamicsData.totalCPL.toFixed(0)}</td>
                   <td colSpan={3}></td>
-                  <td className="p-2 text-center text-indigo-300">{dynamicsData.totalPlanPercent.toFixed(0)}%</td>
+                  <td className="p-1.5 md:p-2 text-center text-indigo-300">{dynamicsData.totalPlanPercent.toFixed(0)}%</td>
                 </tr>
               </tfoot>
             </table>
@@ -481,55 +580,78 @@ const AdminDashboard: React.FC<{
             </div>
         </div>
         
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left border-collapse">
+        <div className="table-scroll-container overflow-x-auto">
+          <table className="w-full text-sm text-left border-collapse mobile-table">
             <thead>
               <tr className="text-gray-500 text-xs font-semibold uppercase bg-black/20 border-b border-white/5 tracking-wider">
                 {[
-                  { id: 'owner', label: 'Таргетолог' },
+                  { id: 'owner', label: 'Таргетолог', sticky: true },
                   { id: 'projectName', label: 'Проект' },
                   { id: 'leads', label: 'Лиды' },
-                  { id: 'goal', label: 'План (Мес)' },
-                  { id: 'percent', label: 'Выполнение' },
+                  { id: 'goal', label: 'План' },
+                  { id: 'percent', label: '%' },
                   { id: 'budget', label: 'Бюджет' },
                   { id: 'spend', label: 'Открут' },
                   { id: 'actualCpa', label: 'CPA' },
-                  { id: 'avgTargetCpa', label: 'KPI CPA' },
-                ].map(h => (
-                  <th key={h.id} className="p-4 cursor-pointer group/th hover:text-white transition-colors" onClick={() => setSortConfig({ key: h.id, direction: sortConfig.key === h.id && sortConfig.direction === 'desc' ? 'asc' : 'desc' })}>
+                  { id: 'avgTargetCpa', label: 'KPI' },
+                ].map((h, idx) => (
+                  <th key={h.id} className={`p-2 md:p-4 cursor-pointer group/th hover:text-white transition-colors ${idx === 0 ? 'sticky-col bg-slate-900/95 backdrop-blur-sm min-w-[80px]' : ''}`} onClick={() => setSortConfig({ key: h.id, direction: sortConfig.key === h.id && sortConfig.direction === 'desc' ? 'asc' : 'desc' })}>
                     <div className="flex items-center gap-1 justify-center first:justify-start">
                       {h.label}
                       {sortIcon(h.id)}
                     </div>
                   </th>
                 ))}
-                <th className="p-4"></th>
+                <th className="p-2 md:p-4"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
-                {monthlyProjects.map(({ owner, project, leads, goal, budget, spend, actualCpa, avgTargetCpa, percent }) => (
-                  <tr key={project.id} className="hover:bg-white/[0.02] transition-colors group">
-                    <td className="p-4 text-indigo-300 font-medium">{owner}</td>
-                    <td className="p-4">
+                {monthlyProjects.map(({ owner, project, leads, goal, budget, spend, actualCpa, avgTargetCpa, percent }, rowIdx) => (
+                  <tr key={project.id} className={`${rowIdx % 2 === 0 ? 'bg-slate-900/40' : 'bg-slate-800/40'} hover:bg-white/[0.05] transition-colors group`}>
+                    <td className={`p-2 md:p-4 text-indigo-300 font-medium sticky-col ${rowIdx % 2 === 0 ? 'bg-slate-900/95' : 'bg-slate-800/95'} backdrop-blur-sm text-sm`}>{owner}</td>
+                    <td className="p-2 md:p-4">
                       <input 
                         className="bg-transparent w-full text-gray-200 focus:text-white focus:outline-none" 
                         value={project.name} 
                         onChange={(e) => {
                           console.log('📝 onChange в инпуте имени вызван:', { owner, projectId: project.id, newValue: e.target.value });
-                          onUpdateProject(owner, project.id, { ...project, name: e.target.value });
+                          console.log('📝 Текущий проект перед обновлением имени:', {
+                            id: project.id,
+                            name: project.name,
+                            leadsCount: Object.keys(project.leads || {}).length,
+                            weeksCount: Object.keys(project.weeks || {}).length,
+                            leads: project.leads,
+                            weeks: project.weeks
+                          });
+                          // ВАЖНО: Сохраняем leads и weeks при обновлении имени!
+                          const updated = { 
+                            ...project, 
+                            name: e.target.value,
+                            leads: { ...project.leads }, // Явно копируем leads
+                            weeks: { ...project.weeks }  // Явно копируем weeks
+                          };
+                          console.log('📝 Обновленный проект после изменения имени:', {
+                            id: updated.id,
+                            name: updated.name,
+                            leadsCount: Object.keys(updated.leads || {}).length,
+                            weeksCount: Object.keys(updated.weeks || {}).length,
+                            leads: updated.leads,
+                            weeks: updated.weeks
+                          });
+                          onUpdateProject(owner, project.id, updated);
                         }} 
                       />
                     </td>
-                    <td className="p-4 text-center text-white font-bold">{leads}</td>
-                    <td className="p-4 text-center">
+                    <td className="p-2 md:p-4 text-center text-white font-bold">{leads}</td>
+                    <td className="p-2 md:p-4 text-center">
                       <input 
                         type="number"
-                        className="bg-black/20 text-center rounded py-1 px-2 text-gray-300 focus:text-white w-20 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        className="bg-black/20 text-center rounded py-1 px-1 md:px-2 text-gray-300 focus:text-white w-16 md:w-20 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                         value={goal || ''}
                         onChange={(e) => handleUpdateMonthlyGoal(owner, project, parseFloat(e.target.value) || 0)}
                       />
                     </td>
-                    <td className="p-4 w-[150px]">
+                    <td className="p-2 md:p-4 min-w-[80px] md:min-w-[120px]">
                       <div className="flex flex-col gap-1">
                         <div className="flex justify-between text-xs mb-1">
                           <span className={percent >= 100 ? 'text-emerald-400' : 'text-gray-400'}>{percent.toFixed(0)}%</span>
@@ -537,11 +659,11 @@ const AdminDashboard: React.FC<{
                         <ProgressBar percent={percent} />
                       </div>
                     </td>
-                    <td className="p-4 text-center text-gray-500">{budget.toLocaleString()}</td>
-                    <td className="p-4 text-center text-white">{spend.toLocaleString()}</td>
-                    <td className={`p-4 text-center font-bold ${actualCpa <= avgTargetCpa ? 'text-emerald-400' : 'text-rose-400'}`}>{actualCpa.toFixed(0)}</td>
-                    <td className="p-4 text-center text-gray-500">{avgTargetCpa.toFixed(0)}</td>
-                    <td className="p-4 text-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <td className="p-2 md:p-4 text-center text-gray-500 text-xs md:text-sm">{budget.toLocaleString()}</td>
+                    <td className="p-2 md:p-4 text-center text-white text-xs md:text-sm">{spend.toLocaleString()}</td>
+                    <td className={`p-2 md:p-4 text-center font-bold ${actualCpa <= avgTargetCpa ? 'text-emerald-400' : 'text-rose-400'}`}>{actualCpa.toFixed(0)}</td>
+                    <td className="p-2 md:p-4 text-center text-gray-500">{avgTargetCpa.toFixed(0)}</td>
+                    <td className="p-2 md:p-4 text-center opacity-0 group-hover:opacity-100 md:transition-opacity">
                       <button onClick={() => onDeleteProject(owner, project.id)} className="text-gray-600 hover:text-rose-400"><Trash2 size={16} /></button>
                     </td>
                   </tr>
@@ -550,6 +672,64 @@ const AdminDashboard: React.FC<{
           </table>
         </div>
       </GlassCard>
+
+      {/* Сводная таблица связок */}
+      {bundlesSummary.rows.length > 0 && (
+        <GlassCard className="overflow-hidden">
+          <div className="p-5 border-b border-white/5 flex justify-between items-center">
+            <h3 className="text-xl font-bold text-white flex items-center gap-2">
+              <BarChart3 className="text-amber-400" />
+              Сводная таблица связок
+            </h3>
+            <span className="text-xs text-gray-400 bg-black/20 px-2 py-1 rounded">
+              {bundlesSummary.rows.length} связок
+            </span>
+          </div>
+          
+          <div className="table-scroll-container overflow-x-auto">
+            <table className="w-full text-sm text-left border-collapse mobile-table">
+              <thead>
+                <tr className="text-gray-500 text-xs font-semibold uppercase bg-black/20 border-b border-white/5 tracking-wider">
+                  <th className="p-3 md:p-4 sticky-col bg-slate-900/95 backdrop-blur-sm min-w-[100px]">Связка</th>
+                  {bundlesSummary.targetologists.map(name => (
+                    <th key={name} className="p-3 md:p-4 text-center min-w-[80px]">{name}</th>
+                  ))}
+                  <th className="p-3 md:p-4 text-center bg-indigo-900/20 text-indigo-300 font-bold min-w-[100px]">ИТОГО</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {bundlesSummary.rows.map(({ bundleName, values, total }, rowIdx) => (
+                  <tr key={bundleName} className={`${rowIdx % 2 === 0 ? 'bg-slate-900/40' : 'bg-slate-800/40'} hover:bg-white/[0.05] transition-colors`}>
+                    <td className={`p-3 md:p-4 font-bold text-white sticky-col ${rowIdx % 2 === 0 ? 'bg-slate-900/95' : 'bg-slate-800/95'} backdrop-blur-sm`}>{bundleName}</td>
+                    {bundlesSummary.targetologists.map(name => (
+                      <td key={name} className={`p-3 md:p-4 text-center ${values[name] > 0 ? 'text-white' : 'text-gray-600'}`}>
+                        {values[name] > 0 ? values[name].toLocaleString() : '0'}
+                      </td>
+                    ))}
+                    <td className="p-3 md:p-4 text-center font-bold text-indigo-300 bg-indigo-900/10">
+                      {total.toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-indigo-900/20 font-bold text-white border-t border-indigo-500/30">
+                <tr>
+                  <td className="p-3 md:p-4 sticky-col bg-indigo-900/80 backdrop-blur-sm">ИТОГО</td>
+                  {bundlesSummary.targetologists.map(name => {
+                    const userTotal = bundlesSummary.rows.reduce((sum, row) => sum + (row.values[name] || 0), 0);
+                    return (
+                      <td key={name} className="p-3 md:p-4 text-center">{userTotal.toLocaleString()}</td>
+                    );
+                  })}
+                  <td className="p-3 md:p-4 text-center text-indigo-300 bg-indigo-900/30">
+                    {bundlesSummary.rows.reduce((sum, row) => sum + row.total, 0).toLocaleString()}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </GlassCard>
+      )}
     </div>
   );
 };
@@ -561,21 +741,58 @@ const TargetologistWorkspace: React.FC<{
   weekStart: string; 
   allData: AppData;
   onUpdateProjects: (projects: Project[]) => void;
-}> = ({ name, projects, weekStart, onUpdateProjects }) => {
+  onUpdateBundles: (bundles: BundleEntry[]) => void;
+}> = ({ name, projects, weekStart, allData, onUpdateProjects, onUpdateBundles }) => {
+  console.log('🎯🎯🎯 TargetologistWorkspace РЕНДЕРИТСЯ! 🎯🎯🎯', { 
+    name, 
+    projectsCount: projects.length,
+    projects: projects.map(p => ({ id: p.id, name: p.name })),
+    onUpdateProjectsType: typeof onUpdateProjects,
+    onUpdateProjectsExists: !!onUpdateProjects
+  });
+  
   const days = useMemo(() => getWeekDays(new Date(weekStart)).map(d => d.iso), [weekStart]);
   const displayDays = useMemo(() => getWeekDays(new Date(weekStart)), [weekStart]);
 
-  const stats = useMemo(() => {
-    let totalLeads = 0, totalSpend = 0, totalGoal = 0;
+  // Константа для "нет бюджета" (должна совпадать с ProjectRow)
+  const NO_BUDGET_VALUE = -1;
+
+  // Статистика личного плана (игнорируем дни с "н")
+  const personalStats = useMemo(() => {
+    let totalLeads = 0, totalGoal = 0;
     projects.forEach(p => {
-      const weeklyLeads = days.reduce((acc, date) => acc + (p.leads[date] || 0), 0);
-      const wStats = p.weeks[weekStart] || { spend: 0, goal: p.defaultGoal };
+      const weeklyLeads = days.reduce((acc, date) => {
+        const val = p.leads[date];
+        if (val === NO_BUDGET_VALUE || val === undefined) return acc;
+        return acc + val;
+      }, 0);
+      const wStats = p.weeks[weekStart] || { goal: p.defaultGoal };
       totalLeads += weeklyLeads;
-      totalSpend += (wStats.spend || 0);
       totalGoal += (wStats.goal || 0);
     });
-    return { totalLeads, totalSpend, totalGoal, avgCpa: totalLeads > 0 ? totalSpend / totalLeads : 0 };
+    const percent = totalGoal > 0 ? (totalLeads / totalGoal) * 100 : 0;
+    return { totalLeads, totalGoal, percent };
   }, [projects, days, weekStart]);
+
+  // Статистика команды (из allData, игнорируем дни с "н")
+  const teamStats = useMemo(() => {
+    let teamLeads = 0, teamGoal = 0;
+    Object.entries(allData).forEach(([userName, userData]) => {
+      const user = userData as UserData;
+      user.projects?.forEach(p => {
+        const weeklyLeads = days.reduce((acc, date) => {
+          const val = p.leads[date];
+          if (val === NO_BUDGET_VALUE || val === undefined) return acc;
+          return acc + val;
+        }, 0);
+        const wStats = p.weeks[weekStart] || { goal: p.defaultGoal };
+        teamLeads += weeklyLeads;
+        teamGoal += (wStats.goal || 0);
+      });
+    });
+    const percent = teamGoal > 0 ? (teamLeads / teamGoal) * 100 : 0;
+    return { teamLeads, teamGoal, percent };
+  }, [allData, days, weekStart]);
 
   const handleAddProject = () => {
     onUpdateProjects([...projects, { ...NEW_PROJECT_TEMPLATE, id: generateId(), name: 'Новый проект' }]);
@@ -583,9 +800,70 @@ const TargetologistWorkspace: React.FC<{
 
   const handleUpdate = (id: string, updated: Project) => {
     console.log('🔄 handleUpdate в TargetologistWorkspace вызван:', { id, updatedName: updated.name });
+    console.log('📝 Обновленный проект (детали):', {
+      id: updated.id,
+      name: updated.name,
+      leadsCount: Object.keys(updated.leads || {}).length,
+      weeksCount: Object.keys(updated.weeks || {}).length,
+      leads: updated.leads,
+      weeks: updated.weeks,
+      leadsKeys: Object.keys(updated.leads || {}),
+      weeksKeys: Object.keys(updated.weeks || {})
+    });
+    
+    console.log('📋 Текущий массив projects перед обновлением:', {
+      projectsCount: projects.length,
+      projects: projects.map(p => ({
+        id: p.id,
+        name: p.name,
+        leadsCount: Object.keys(p.leads || {}).length,
+        weeksCount: Object.keys(p.weeks || {}).length
+      }))
+    });
+    
     const updatedProjects = projects.map(p => p.id === id ? updated : p);
     console.log('🔄 Стейт обновлен (TargetologistWorkspace):', { projectsCount: updatedProjects.length });
+    
+    // ДЕТАЛЬНАЯ ПРОВЕРКА: Проверяем весь массив проектов после обновления
+    console.log('📋 Проверка ВСЕХ проектов в массиве после обновления:');
+    updatedProjects.forEach((p, index) => {
+      console.log(`  Проект ${index + 1}:`, {
+        id: p.id,
+        name: p.name,
+        leadsCount: Object.keys(p.leads || {}).length,
+        weeksCount: Object.keys(p.weeks || {}).length,
+        leads: p.leads,
+        weeks: p.weeks,
+        leadsKeys: Object.keys(p.leads || {}),
+        weeksKeys: Object.keys(p.weeks || {})
+      });
+    });
+    
+    // Проверяем, что leads сохранились в массиве проектов
+    const updatedProjectInArray = updatedProjects.find(p => p.id === id);
+    if (updatedProjectInArray) {
+      console.log('✅ Обновленный проект найден в массиве:', {
+        id: updatedProjectInArray.id,
+        name: updatedProjectInArray.name,
+        leadsCount: Object.keys(updatedProjectInArray.leads || {}).length,
+        weeksCount: Object.keys(updatedProjectInArray.weeks || {}).length,
+        leads: updatedProjectInArray.leads,
+        weeks: updatedProjectInArray.weeks
+      });
+    } else {
+      console.error('❌ Обновленный проект НЕ найден в массиве!', { id, updatedProjectsIds: updatedProjects.map(p => p.id) });
+    }
+    
+    console.log('📤 Вызываю onUpdateProjects с массивом проектов...');
+    console.log('📤 Массив проектов перед передачей:', updatedProjects.map(p => ({
+      id: p.id,
+      name: p.name,
+      leadsCount: Object.keys(p.leads || {}).length,
+      leads: p.leads
+    })));
+    
     onUpdateProjects(updatedProjects);
+    console.log('✅ onUpdateProjects вызван');
   };
 
   const handleDelete = (id: string) => {
@@ -594,12 +872,45 @@ const TargetologistWorkspace: React.FC<{
     }
   };
 
+  // Получаем данные связок из allData
+  const userBundles = allData[name]?.bundles || [];
+  console.log('📦 Данные связок для', name, ':', userBundles);
+  
+  // Инициализируем массив из 12 строк с 3 парами связок в каждой
+  const bundlesRows = useMemo(() => {
+    const rows: BundleEntry[][] = [];
+    for (let i = 0; i < 12; i++) {
+      const row: BundleEntry[] = [];
+      for (let j = 0; j < 3; j++) {
+        const index = i * 3 + j;
+        row.push(userBundles[index] || { bundle: '', unscrew: 0 });
+      }
+      rows.push(row);
+    }
+    return rows;
+  }, [userBundles]);
+
+
+  // Список возможных связок
+  const availableBundles = ['Т1', 'Т2', 'Т3', 'Т4', 'Т5', 'Т6', 'Т7', 'Т8', 'Т9', 'Т10'];
+
   return (
     <div className="space-y-8 pb-20">
-       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatCard title="Мои лиды" value={stats.totalLeads} subtext={`${stats.totalGoal > 0 ? ((stats.totalLeads / stats.totalGoal) * 100).toFixed(0) : 0}% от плана`} icon={Users} color="text-indigo-400" />
-        <StatCard title="Мой расход" value={`${stats.totalSpend.toLocaleString()} ₽`} subtext="За неделю" icon={DollarSign} color="text-emerald-400" />
-        <StatCard title="CPL" value={`${stats.avgCpa.toFixed(0)} ₽`} subtext="Средняя цена" icon={Target} color="text-rose-400" />
+       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <StatCard 
+          title="Мой план" 
+          value={`${personalStats.percent.toFixed(0)}%`} 
+          subtext={`${personalStats.totalLeads} из ${personalStats.totalGoal} лидов`} 
+          icon={Target} 
+          color={personalStats.percent >= 100 ? 'text-emerald-400' : personalStats.percent >= 80 ? 'text-amber-400' : 'text-indigo-400'} 
+        />
+        <StatCard 
+          title="План команды" 
+          value={`${teamStats.percent.toFixed(0)}%`} 
+          subtext={`${teamStats.teamLeads} из ${teamStats.teamGoal} лидов`} 
+          icon={Users} 
+          color={teamStats.percent >= 100 ? 'text-emerald-400' : teamStats.percent >= 80 ? 'text-amber-400' : 'text-indigo-400'} 
+        />
       </div>
 
       <GlassCard className="overflow-hidden flex flex-col">
@@ -608,41 +919,58 @@ const TargetologistWorkspace: React.FC<{
             <LayoutDashboard className="text-indigo-400" size={18} />
             Мои проекты
           </h3>
-          <button onClick={handleAddProject} className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors">
-            <Plus size={16} /> Добавить
-          </button>
+          <div className="flex items-center gap-6">
+            <button onClick={handleAddProject} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors">
+              <Plus size={16} /> Добавить
+            </button>
+          </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left border-collapse">
-            <thead className="bg-white/5 text-gray-400 font-medium text-xs uppercase">
-               <tr>
-                  <th className="p-2 border-b border-white/10 min-w-[150px]">Проект</th>
-                  {displayDays.map(d => (
-                    <th key={d.iso} className="p-2 text-center border-b border-white/10 w-[60px]">
-                      <div>{d.name}</div><div className="text-[10px] opacity-50">{d.display}</div>
-                    </th>
-                  ))}
-                  <th className="p-2 text-center border-b border-white/10 text-white">Итого</th>
-                  <th className="p-2 text-center border-b border-white/10">План</th>
-                  <th className="p-2 text-center border-b border-white/10">%</th>
-                  <th className="p-2 text-center border-b border-white/10">Бюджет</th>
-                  <th className="p-2 text-center border-b border-white/10">Открут</th>
-                  <th className="p-2 text-center border-b border-white/10">CPL</th>
-                  <th className="p-2 text-center border-b border-white/10">KPI</th>
-                  <th className="p-2 text-center border-b border-white/10"></th>
-               </tr>
+        <div className="table-scroll-container overflow-x-auto">
+          <table className="w-full text-sm text-left border-collapse mobile-table">
+            <thead>
+              <tr className="bg-white/5 text-gray-500 font-medium text-xs uppercase">
+                <th className="p-2 border-b border-white/10 min-w-[120px] md:min-w-[150px] sticky-col bg-slate-900/95 backdrop-blur-sm border-r-2 border-r-white/20 text-gray-400">Проект</th>
+                {displayDays.map(d => (
+                  <th key={d.iso} className="p-2 text-center border-b border-white/10 min-w-[50px]">
+                    <div className="text-gray-500">{d.name}</div>
+                    <div className="text-[10px] text-gray-600 font-normal">{d.display}</div>
+                  </th>
+                ))}
+                <th className="p-2 text-center border-b border-white/10 text-emerald-400/80 font-bold min-w-[60px] border-r-2 border-r-white/20 bg-emerald-900/30 text-sm">Итого</th>
+                <th className="p-2 text-center border-b border-white/10 min-w-[60px]">План</th>
+                <th className="p-2 text-center border-b border-white/10 min-w-[80px]">%</th>
+                <th className="p-2 text-center border-b border-white/10 min-w-[80px]">Бюджет</th>
+                <th className="p-2 text-center border-b border-white/10 min-w-[80px]">Открут</th>
+                <th className="p-2 text-center border-b border-white/10 min-w-[60px]">CPL</th>
+                <th className="p-2 text-center border-b border-white/10 min-w-[60px] border-r-2 border-r-white/20">KPI</th>
+                <th className="p-2 text-center border-b border-white/10 min-w-[80px] text-indigo-500/70">Связка</th>
+                <th className="p-2 text-center border-b border-white/10 min-w-[70px] text-indigo-500/70">Открут</th>
+                <th className="p-2 text-center border-b border-white/10 min-w-[80px] text-indigo-500/70">Связка</th>
+                <th className="p-2 text-center border-b border-white/10 min-w-[70px] text-indigo-500/70">Открут</th>
+                <th className="p-2 text-center border-b border-white/10 min-w-[80px] text-indigo-500/70">Связка</th>
+                <th className="p-2 text-center border-b border-white/10 min-w-[70px] text-indigo-500/70">Открут</th>
+                <th className="p-2 text-center border-b border-white/10 min-w-[80px] text-indigo-500/70">Связка</th>
+                <th className="p-2 text-center border-b border-white/10 min-w-[70px] text-indigo-500/70 border-r-2 border-r-white/20">Открут</th>
+                <th className="p-2 text-center border-b border-white/10 min-w-[40px]"></th>
+              </tr>
             </thead>
-            <tbody className="divide-y divide-white/5">
-              {projects.map(p => (
+            <tbody>
+              {projects.map((p, index) => (
                 <ProjectRow 
-                  key={p.id} project={p} weekStart={weekStart} days={days} 
-                  onUpdate={handleUpdate} onDelete={handleDelete} 
+                  key={p.id} 
+                  project={p} 
+                  weekStart={weekStart} 
+                  days={days} 
+                  onUpdate={handleUpdate} 
+                  onDelete={handleDelete}
+                  rowIndex={index}
                 />
               ))}
             </tbody>
           </table>
         </div>
       </GlassCard>
+
     </div>
   );
 };
@@ -650,125 +978,144 @@ const TargetologistWorkspace: React.FC<{
 // --- App Entry ---
 
 const App: React.FC = () => {
-  const [data, setData] = useState<AppData>({});
+  // Используем функцию-инициализатор, чтобы пустой объект создавался только один раз
+  // и не вызывал лишних срабатываний useEffect при первом рендере
+  const [data, setData] = useState<AppData>(() => ({}));
   const [currentUser, setCurrentUser] = useState<{ role: Role; name?: string } | null>(null);
   const [currentWeekId, setCurrentWeekId] = useState(WEEKS_LIST[0].id);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSyncing, setIsSyncing] = useState(false); // Флаг для предотвращения циклических обновлений
-  const [hasLoadedFromServer, setHasLoadedFromServer] = useState(false); // Флаг для защиты от перезаписи пустым объектом
+  const [hasLoadedFromServer, setHasLoadedFromServer] = useState(false);
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
-  // Загрузка данных при монтировании компонента
+  // 1. Загрузка данных (без изменений, она у тебя хорошая)
   useEffect(() => {
     const loadData = async () => {
       try {
         setIsLoading(true);
-        console.log('📥 Загрузка данных из Supabase...');
         const initialData = await getInitialData();
-        console.log('✅ Данные успешно загружены из Supabase');
-        console.log('📋 Загруженные пользователи:', Object.keys(initialData));
-        
-        // Проверяем структуру данных для текущего пользователя (если он уже выбран)
-        if (currentUser?.name && initialData[currentUser.name]) {
-          console.log(`👤 Данные для ${currentUser.name}:`, initialData[currentUser.name]);
-        }
-        
         setData(initialData);
-        setHasLoadedFromServer(true); // Устанавливаем флаг после успешной загрузки
-        console.log('✅ Флаг hasLoadedFromServer установлен в true');
+        setHasLoadedFromServer(true);
+        console.log('📥 Первичная загрузка завершена');
       } catch (error) {
-        console.error('❌ Ошибка при загрузке данных:', error);
+        console.error('❌ Ошибка загрузки:', error);
       } finally {
         setIsLoading(false);
       }
     };
-
     loadData();
   }, []);
 
-  // Подписка на изменения в реальном времени
+  // 2. УМНЫЙ МЕРЖИНГ (Self-Healing Merge)
   useEffect(() => {
-    console.log('🔄 Создание подписки на изменения...');
+    if (!hasLoadedFromServer) return;
     
-    const unsubscribe = subscribeToDataChanges((newData) => {
-      console.log('📡 Получены обновленные данные через real-time синхронизацию');
-      console.log('📋 Пользователи в новых данных:', Object.keys(newData));
-      setIsSyncing(true); // Устанавливаем флаг, чтобы не сохранять данные обратно
-      setData(newData);
-      // Сбрасываем флаг через небольшую задержку
-      setTimeout(() => {
-        setIsSyncing(false);
-        console.log('🔄 Флаг синхронизации сброшен');
-      }, 100);
-    });
+    const unsubscribe = subscribeToDataChanges(
+      (newData) => {
+        // Игнорируем эхо от сервера только если мы сейчас отправляем
+        if (isSyncing) {
+          console.log('⏭️ Игнорируем эхо от сервера (isSyncing=true)');
+          return;
+        }
 
-    console.log('✅ Функция подписки создана, unsubscribe доступен:', typeof unsubscribe === 'function');
+        setData(prev => {
+          const next: AppData = JSON.parse(JSON.stringify(prev)); // Глубокая копия
 
-    // Отписка при размонтировании
-    return () => {
-      console.log('🔄 Размонтирование компонента, отписка от изменений...');
-      unsubscribe();
-    };
-  }, []);
+          Object.entries(newData).forEach(([user, serverUser]) => {
+            if (!next[user]) {
+              next[user] = serverUser as UserData;
+              return;
+            }
 
-  // Сохранение данных при изменении (с дебаунсом для оптимизации)
+            next[user].projects = next[user].projects.map(localProj => {
+              const serverProj = (serverUser as UserData).projects.find(p => p.id === localProj.id);
+              if (!serverProj) return localProj;
+
+              // Сливаем лиды: если в локальном стейте значение есть, оно ВАЖНЕЕ серверного
+              const mergedLeads = { ...serverProj.leads, ...localProj.leads };
+              
+              return { 
+                ...serverProj, 
+                leads: mergedLeads,
+                weeks: { ...serverProj.weeks, ...localProj.weeks }
+              };
+            });
+          });
+
+          return next;
+        });
+      },
+      (connected) => {
+        setRealtimeConnected(connected);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [hasLoadedFromServer, isSyncing]);
+
+  // 3. САМОВОССТАНАВЛИВАЮЩЕЕСЯ СОХРАНЕНИЕ
   useEffect(() => {
-    console.log('🔍 useEffect сохранения вызван. Проверка условий:', {
-      hasLoadedFromServer,
-      isSyncing,
-      isLoading,
-      dataKeys: Object.keys(data).length,
-      dataEmpty: Object.keys(data).length === 0,
-      dataSnapshot: JSON.stringify(data).substring(0, 100) + '...'
-    });
+    if (!hasLoadedFromServer || isLoading || isSyncing) return;
 
-    // Защита от перезаписи: не сохраняем, если данные еще не загрузились с сервера
-    if (!hasLoadedFromServer) {
-      console.log('⏸️ Сохранение отложено: данные еще не загружены с сервера (hasLoadedFromServer =', hasLoadedFromServer, ')');
-      return;
-    }
-    
-    // Не сохраняем, если данные пришли через real-time синхронизацию или если идет загрузка
-    if (isSyncing || isLoading) {
-      console.log('⏸️ Сохранение отложено: isSyncing =', isSyncing, ', isLoading =', isLoading);
-      return;
-    }
-    
-    // Не сохраняем пустой объект только до первой загрузки
-    // После загрузки (hasLoadedFromServer = true) сохраняем всегда, даже пустой объект (для первого пользователя)
-    if (!hasLoadedFromServer && Object.keys(data).length === 0) {
-      console.log('⏸️ Сохранение отменено: данные пусты и еще не загружены');
-      return;
-    }
-    
-    // Если hasLoadedFromServer = true, мы сохраняем в любом случае (даже для первого пользователя)
-
-    console.log('✅ Все условия пройдены! hasLoadedFromServer =', hasLoadedFromServer, ', запускаю сохранение через 500мс...');
-    const timeoutId = setTimeout(() => {
-      console.log('💾 Сохранение данных в Supabase...', Object.keys(data));
-      saveData(data).catch(error => {
-        console.error('❌ Ошибка при сохранении данных в Supabase:', error);
+    // 🛡️ Считаем реальные данные (лиды) - СУММУ, а не количество ключей!
+    let leadsCount = 0;
+    Object.values(data).forEach(u => {
+      const userData = u as UserData;
+      userData.projects?.forEach(p => {
+        // ✅ Считаем СУММУ всех значений лидов
+        Object.values(p.leads || {}).forEach(leadValue => {
+          leadsCount += Number(leadValue) || 0;
+        });
       });
-    }, 500); // Дебаунс 500мс
+    });
 
-    return () => {
-      console.log('🧹 Очистка таймера сохранения');
-      clearTimeout(timeoutId);
-    };
-  }, [data, isLoading, isSyncing, hasLoadedFromServer]);
+    // Если лидов 0, а мы пытаемся сохранить — значит это пустой старт. 
+    // Но если лиды ПОЯВИЛИСЬ, мы обязаны их отправить.
+    if (leadsCount === 0) return;
+
+    const timeoutId = setTimeout(async () => {
+      console.log(`🚀 ОБНАРУЖЕНО ЛИДОВ: ${leadsCount}. ОТПРАВЛЯЮ В SUPABASE...`);
+      try {
+        setIsSyncing(true);
+        await saveData(data);
+        console.log('✅ УСПЕШНО СОХРАНЕНО');
+      } catch (err) {
+        console.error('❌ ОШИБКА СОХРАНЕНИЯ:', err);
+      } finally {
+        setIsSyncing(false);
+      }
+    }, 1500); // 1.5 секунды задержки
+
+    return () => clearTimeout(timeoutId);
+  }, [data, hasLoadedFromServer, isLoading, isSyncing]);
 
   const handleLogout = () => setCurrentUser(null);
   const handleUpdate = (updater: (prev: AppData) => AppData) => {
     setData(prev => {
-      const newData = updater(prev);
-      console.log('🔄 Стейт обновлен:', newData);
-      console.log('📋 Ключи в обновленных данных:', Object.keys(newData));
-      console.log('📝 Новое значение в стейте:', JSON.stringify(newData).substring(0, 200) + '...');
-      return newData;
+      const next = updater(prev);
+      
+      // Для дебага: проверяем, что лиды реально попали в новый стейт
+      const firstUser = Object.keys(next)[0];
+      if (firstUser && next[firstUser]?.projects?.[0]) {
+        const leadsCount = Object.keys(next[firstUser].projects[0].leads || {}).length;
+        console.log(`📝 Стейт обновлен локально. Лидов у ${firstUser}: ${leadsCount}`);
+      }
+      
+      return next;
     });
   };
 
   const updateSingle = (owner: string, pId: string, updated: Project) => {
     console.log('🔄 updateSingle вызван:', { owner, pId, updatedName: updated.name });
+    console.log('📝 Обновляемый проект (детали):', {
+      id: updated.id,
+      name: updated.name,
+      leadsCount: Object.keys(updated.leads || {}).length,
+      leads: updated.leads,
+      weeksCount: Object.keys(updated.weeks || {}).length,
+      weeks: updated.weeks
+    });
+    
     handleUpdate(prev => {
       const userData = prev[owner] || { projects: [] };
       const projectExists = userData.projects.some(p => p.id === pId);
@@ -776,6 +1123,21 @@ const App: React.FC = () => {
         ? userData.projects.map(p => p.id === pId ? updated : p)
         : [...userData.projects, updated];
       const newData = { ...prev, [owner]: { projects: newProjects } };
+      
+      // Проверяем, что leads и weeks сохранились
+      const updatedProject = newProjects.find(p => p.id === pId);
+      if (updatedProject) {
+        console.log('✅ Проект обновлен в стейте:', {
+          id: updatedProject.id,
+          name: updatedProject.name,
+          leadsCount: Object.keys(updatedProject.leads || {}).length,
+          weeksCount: Object.keys(updatedProject.weeks || {}).length,
+          sampleLeads: Object.entries(updatedProject.leads || {}).slice(0, 3),
+          sampleWeeks: Object.keys(updatedProject.weeks || {}).slice(0, 3)
+        });
+      }
+      
+      console.log('📝 Данные готовы к отправке:', newProjects);
       console.log('📝 Новое значение в стейте (updateSingle):', newData);
       console.log('📋 Проектов у пользователя:', newProjects.length);
       return newData;
@@ -787,13 +1149,35 @@ const App: React.FC = () => {
     handleUpdate(prev => ({ ...prev, [owner]: { projects: prev[owner].projects.filter(p => p.id !== pId) } }));
   };
 
-  const updateUserProjects = (owner: string, projects: Project[]) => {
-    console.log('🔄 updateUserProjects вызван:', { owner, projectsCount: projects.length });
+  const updateUserProjects = (owner: string, updatedProjects: Project[]) => {
+    console.log('🚨🚨🚨 updateUserProjects ВЫЗВАН!', { 
+      owner, 
+      projectsCount: updatedProjects.length
+    });
+    
     handleUpdate(prev => {
-      const newData = { ...prev, [owner]: { projects } };
-      console.log('📝 Новое значение в стейте (updateUserProjects):', newData);
-      console.log('📋 Всего пользователей:', Object.keys(newData).length);
-      console.log('📋 Проектов у пользователя', owner, ':', projects.length);
+      const newData = { ...prev };
+      newData[owner] = {
+        ...newData[owner],
+        projects: updatedProjects.map(p => ({
+          ...p,
+          leads: { ...(p.leads || {}) }, // Гарантия копирования
+          weeks: { ...(p.weeks || {}) }
+        }))
+      };
+      
+      console.log('✅ updateUserProjects: данные подготовлены для', owner);
+      return newData;
+    });
+  };
+
+  const updateUserBundles = (owner: string, bundles: BundleEntry[]) => {
+    handleUpdate(prev => {
+      const newData = { ...prev };
+      newData[owner] = {
+        ...newData[owner],
+        bundles: bundles
+      };
       return newData;
     });
   };
@@ -848,29 +1232,64 @@ const App: React.FC = () => {
   }
 
   // --- Main Layout ---
+  console.log('🏠 App рендерится:', { 
+    currentUser: currentUser ? { role: currentUser.role, name: currentUser.name } : null,
+    dataKeys: Object.keys(data),
+    ivanProjects: data['Иван']?.projects?.length || 0
+  });
+  
+  // Вычисляем количество лидов для детектора
+  let totalLeads = 0;
+  let totalProjects = 0;
+  try {
+    Object.values(data).forEach(user => {
+      const userData = user as UserData;
+      if (userData.projects) {
+        totalProjects += userData.projects.length;
+        userData.projects.forEach(p => {
+          // ✅ Считаем СУММУ всех значений лидов, а не количество ключей
+          Object.values(p.leads || {}).forEach(leadValue => {
+            totalLeads += Number(leadValue) || 0;
+          });
+        });
+      }
+    });
+  } catch (e) {
+    console.error('Ошибка при вычислении детектора:', e);
+  }
+  
   return (
     <div className="min-h-screen bg-black text-slate-200 selection:bg-indigo-500/30">
       <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/20 via-slate-950 to-black pointer-events-none" />
       
       <header className="sticky top-0 z-50 backdrop-blur-xl bg-black/50 border-b border-white/5">
-        <div className="max-w-[1600px] mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-             <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
-              <TrendingUp className="text-white w-6 h-6" />
+        <div className="max-w-[1600px] mx-auto px-3 md:px-6 h-14 md:h-20 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 md:gap-4">
+             <div className="w-8 h-8 md:w-10 md:h-10 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-lg md:rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
+              <TrendingUp className="text-white w-4 h-4 md:w-6 md:h-6" />
             </div>
-            <span className="text-2xl font-bold text-white tracking-tight hidden md:block">FROMI</span>
+            <span className="text-xl md:text-2xl font-bold text-white tracking-tight hidden sm:block">FROMI</span>
           </div>
 
-          <div className="flex items-center bg-white/5 rounded-xl border border-white/10 p-1.5 shadow-inner shadow-black/50">
-             <button onClick={() => { const idx = WEEKS_LIST.findIndex(w => w.id === currentWeekId); if (idx > 0) setCurrentWeekId(WEEKS_LIST[idx - 1].id); }} className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-colors"><ChevronLeft size={18} /></button>
-             <div className="px-6 flex items-center gap-3 text-sm font-bold text-white min-w-[180px] justify-center">
-               <Calendar size={16} className="text-indigo-400" />
+          <div className="flex items-center bg-white/5 rounded-lg md:rounded-xl border border-white/10 p-1 md:p-1.5 shadow-inner shadow-black/50">
+             <button onClick={() => { const idx = WEEKS_LIST.findIndex(w => w.id === currentWeekId); if (idx > 0) setCurrentWeekId(WEEKS_LIST[idx - 1].id); }} className="p-1.5 md:p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-colors"><ChevronLeft size={16} /></button>
+             <div className="px-2 md:px-6 flex items-center gap-1 md:gap-3 text-xs md:text-sm font-bold text-white min-w-[100px] md:min-w-[180px] justify-center">
+               <Calendar size={14} className="text-indigo-400 hidden sm:block" />
                {WEEKS_LIST.find(w => w.id === currentWeekId)?.label}
              </div>
-             <button onClick={() => { const idx = WEEKS_LIST.findIndex(w => w.id === currentWeekId); if (idx < WEEKS_LIST.length - 1) setCurrentWeekId(WEEKS_LIST[idx + 1].id); }} className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-colors"><ChevronRight size={18} /></button>
+             <button onClick={() => { const idx = WEEKS_LIST.findIndex(w => w.id === currentWeekId); if (idx < WEEKS_LIST.length - 1) setCurrentWeekId(WEEKS_LIST[idx + 1].id); }} className="p-1.5 md:p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-colors"><ChevronRight size={16} /></button>
           </div>
 
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-2 md:gap-6">
+             {/* Индикатор Realtime подключения */}
+             <div className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-lg text-xs font-medium transition-all ${
+               realtimeConnected 
+                 ? 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-400' 
+                 : 'bg-rose-500/20 border border-rose-500/30 text-rose-400'
+             }`}>
+               <div className={`w-2 h-2 rounded-full ${realtimeConnected ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
+               <span className="hidden md:inline">{realtimeConnected ? 'Синхронизация' : 'Нет связи'}</span>
+             </div>
              <div className="text-right hidden md:block">
                 <p className="text-sm font-bold text-white">{currentUser.name}</p>
                 <div className="flex items-center gap-1 justify-end">
@@ -878,12 +1297,12 @@ const App: React.FC = () => {
                   <p className="text-[10px] uppercase tracking-wider text-gray-500">{currentUser.role === 'Admin' ? 'Admin' : 'Targetologist'}</p>
                 </div>
              </div>
-             <button onClick={handleLogout} className="p-3 text-gray-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors"><LogOut size={20} /></button>
+             <button onClick={handleLogout} className="p-2 md:p-3 text-gray-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors"><LogOut size={18} /></button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-[1600px] mx-auto px-6 py-10 relative z-10">
+      <main className="max-w-[1600px] mx-auto px-3 md:px-6 py-4 md:py-10 relative z-10">
         <AnimatePresence mode="wait">
           <motion.div 
             key={currentUser.role}
@@ -892,18 +1311,45 @@ const App: React.FC = () => {
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.3 }}
           >
-            {currentUser.role === 'Admin' ? (
+            {(() => {
+              console.log('🔍 Проверка роли пользователя:', { 
+                role: currentUser.role, 
+                name: currentUser.name,
+                isAdmin: currentUser.role === 'Admin',
+                isTargetologist: currentUser.role === 'Targetologist'
+              });
+              return currentUser.role === 'Admin' ? (
               <AdminDashboard 
                 data={data} weekStart={currentWeekId}
                 onUpdateProject={updateSingle} onDeleteProject={deleteSingle}
               />
             ) : (
-              <TargetologistWorkspace 
-                name={currentUser.name!} projects={data[currentUser.name!]?.projects || []}
-                weekStart={currentWeekId} allData={data}
-                onUpdateProjects={(p) => updateUserProjects(currentUser.name!, p)}
-              />
-            )}
+              <>
+                {console.log('🚨🚨🚨 РЕНДЕРИМ TargetologistWorkspace! 🚨🚨🚨', {
+                  userName: currentUser.name,
+                  projectsCount: data[currentUser.name!]?.projects?.length || 0,
+                  hasData: !!data[currentUser.name!]
+                })}
+                <TargetologistWorkspace 
+                  name={currentUser.name!} 
+                  projects={data[currentUser.name!]?.projects || []}
+                  weekStart={currentWeekId} 
+                  allData={data}
+                  onUpdateProjects={(p) => {
+                    console.log('🚨🚨🚨 onUpdateProjects вызван из App! 🚨🚨🚨', { 
+                      userName: currentUser.name, 
+                      projectsCount: p.length,
+                      projects: p 
+                    });
+                    updateUserProjects(currentUser.name!, p);
+                  }}
+                  onUpdateBundles={(bundles) => {
+                    updateUserBundles(currentUser.name!, bundles);
+                  }}
+                />
+              </>
+              );
+            })()}
           </motion.div>
         </AnimatePresence>
       </main>

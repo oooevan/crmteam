@@ -29,10 +29,18 @@ export interface Project {
   defaultGoal: number;
   defaultBudget: number;
   defaultTargetCpa: number;
+  // Связки для проекта (до 4 штук)
+  bundles?: BundleEntry[];
+}
+
+export interface BundleEntry {
+  bundle: string; // Название связки (например, "Т1", "Т2")
+  unscrew: number; // Открут в рублях
 }
 
 export interface UserData {
   projects: Project[];
+  bundles?: BundleEntry[]; // Массив связок для таргетолога
 }
 
 export interface AppData {

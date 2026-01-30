@@ -132,7 +132,6 @@ const createInitialData = (): AppData => {
 // Получение данных из Supabase
 export const getInitialData = async (): Promise<AppData> => {
   try {
-    // Получаем данные из Supabase
     const { data, error } = await supabase
       .from('reports')
       .select('data')
@@ -140,28 +139,44 @@ export const getInitialData = async (): Promise<AppData> => {
       .single();
 
     if (error) {
-      // Если записи нет, создаем начальную структуру
       if (error.code === 'PGRST116') {
-        console.log('📝 Создание начальной записи в Supabase...');
         const initialData = createInitialData();
         await saveData(initialData);
-        console.log('BASE DATA:', initialData);
         return initialData;
       }
-      console.error('❌ Ошибка при получении данных из Supabase:', error);
       throw error;
     }
 
     if (data && data.data) {
       const fetchedData = data.data as AppData;
-      console.log('BASE DATA:', fetchedData);
+      
+      if (Array.isArray(fetchedData)) {
+        return {} as AppData;
+      }
+      
+      if (Object.keys(fetchedData).length === 0) {
+        const initialData = createInitialData();
+        await saveData(initialData);
+        return initialData;
+      }
+      
+      // Подсчитываем лиды для лога
+      let totalLeads = 0;
+      Object.values(fetchedData).forEach(user => {
+        const userData = user as any;
+        userData.projects?.forEach((p: any) => {
+          Object.values(p.leads || {}).forEach((v: any) => {
+            if (v && Number(v) > 0) totalLeads += Number(v);
+          });
+        });
+      });
+      
+      console.log('📥 Получено из базы (Лидов: ' + totalLeads + ')');
       return fetchedData;
     }
 
-    // Если данных нет, создаем начальную структуру
     const initialData = createInitialData();
     await saveData(initialData);
-    console.log('BASE DATA:', initialData);
     return initialData;
   } catch (error) {
     console.error('❌ Ошибка при подключении к Supabase:', error);
@@ -172,98 +187,121 @@ export const getInitialData = async (): Promise<AppData> => {
 // Сохранение данных в Supabase с использованием upsert
 export const saveData = async (data: AppData): Promise<void> => {
   try {
-    // Используем upsert для создания или обновления записи
+    if (Array.isArray(data) || !data) {
+      return;
+    }
+
+    // Подсчитываем лиды для лога
+    let totalLeads = 0;
+    Object.values(data).forEach(user => {
+      const userData = user as any;
+      userData.projects?.forEach((p: any) => {
+        Object.values(p.leads || {}).forEach((v: any) => {
+          if (v && Number(v) > 0) totalLeads += Number(v);
+        });
+      });
+    });
+
+    console.log('📤 Отправка в базу (Лидов: ' + totalLeads + ')');
+
+    const payload = {
+      id: REPORTS_ID,
+      data: data
+    };
+
     const { error } = await supabase
       .from('reports')
-      .upsert({
-        id: REPORTS_ID,
-        data: data
-      });
+      .upsert(payload)
+      .select();
 
-    // Проверяем ошибку перед выводом успешного сообщения
     if (error) {
-      console.error('❌ ОШИБКА SUPABASE при сохранении данных:');
-      console.error('   Сообщение:', error.message);
-      console.error('   Детали:', error.details);
-      console.error('   Подсказка:', error.hint);
-      console.error('   Код ошибки:', error.code);
+      console.error('❌ Ошибка Supabase:', error.message);
       throw error;
     }
-
-    console.log('✅ Данные успешно сохранены в Supabase');
   } catch (error: any) {
     console.error('❌ Ошибка при сохранении в Supabase:', error);
-    if (error?.message) {
-      console.error('❌ ОШИБКА SUPABASE:', error.message);
-    }
     throw error;
   }
 };
 
 // Подписка на изменения в реальном времени
 export const subscribeToDataChanges = (
-  callback: (data: AppData) => void
+  callback: (data: AppData) => void,
+  onStatusChange?: (connected: boolean) => void
 ): (() => void) => {
-  console.log('🔔 Подписка на изменения данных в реальном времени...');
-  console.log('🔍 ID записи для подписки:', REPORTS_ID);
-
-  const channelName = `reports-${Date.now()}`; // Уникальное имя канала для каждой подписки
-  console.log('📡 Имя канала:', channelName);
-  console.log('📡 Фильтр подписки:', `id=eq.${REPORTS_ID}`);
+  const channelName = `reports-${Date.now()}`;
+  
+  console.log('🔌 Инициализация Realtime подписки...', { channelName, reportId: REPORTS_ID });
 
   const channel = supabase
     .channel(channelName)
     .on(
       'postgres_changes',
       {
-        event: '*', // Слушаем все события (INSERT, UPDATE, DELETE)
+        event: '*',
         schema: 'public',
         table: 'reports',
         filter: `id=eq.${REPORTS_ID}`
       },
       (payload) => {
-        console.log('📡 Получено обновление из Supabase:', payload.eventType);
-        console.log('📦 Полный payload:', JSON.stringify(payload, null, 2));
+        console.log('📡 Получено событие из Supabase:', { 
+          eventType: payload.eventType, 
+          hasData: !!(payload.new as any)?.data,
+          timestamp: new Date().toISOString()
+        });
         
         if (payload.eventType === 'UPDATE' && payload.new && (payload.new as any).data) {
           const newData = (payload.new as any).data as AppData;
-          console.log('📥 Обновление данных через real-time:', Object.keys(newData));
-          // Вызываем callback для обновления UI
+          
+          // Подсчитываем лиды для лога
+          let totalLeads = 0;
+          let totalLeadEntries = 0;
+          Object.values(newData).forEach(user => {
+            const userData = user as any;
+            userData.projects?.forEach((p: any) => {
+              Object.entries(p.leads || {}).forEach(([date, v]: [string, any]) => {
+                totalLeadEntries++;
+                if (v && Number(v) > 0) totalLeads += Number(v);
+              });
+            });
+          });
+          
+          console.log('📥 Получено обновление из базы:', { 
+            totalLeads, 
+            totalLeadEntries,
+            users: Object.keys(newData).length,
+            sample: Object.keys(newData).slice(0, 2)
+          });
           callback(newData);
         } else if (payload.eventType === 'INSERT' && payload.new && (payload.new as any).data) {
           const newData = (payload.new as any).data as AppData;
-          console.log('📥 Вставка данных через real-time:', Object.keys(newData));
+          console.log('📥 Получено вставка новой записи из базы');
           callback(newData);
         } else {
-          console.warn('⚠️ Неожиданный формат payload:', payload);
-          console.warn('⚠️ eventType:', payload.eventType);
-          console.warn('⚠️ payload.new:', payload.new);
+          console.warn('⚠️ Неожиданное событие Realtime:', payload);
         }
       }
     )
     .subscribe((status, err) => {
-      console.log('📊 Статус подписки:', status);
       if (status === 'SUBSCRIBED') {
-        console.log('✅ Подписка на изменения активна');
-        console.log('✅ Канал:', channelName, 'подключен');
+        console.log('✅ Realtime подписка активна!', { channelName });
+        onStatusChange?.(true);
       } else if (status === 'CHANNEL_ERROR') {
-        console.error('❌ Ошибка подписки на изменения:', err);
+        console.error('❌ Ошибка Realtime канала:', err);
+        onStatusChange?.(false);
       } else if (status === 'TIMED_OUT') {
-        console.error('❌ Таймаут при подписке на изменения');
+        console.error('❌ Realtime подписка не удалась (timeout)');
+        onStatusChange?.(false);
       } else if (status === 'CLOSED') {
-        console.warn('⚠️ Канал подписки закрыт:', channelName);
+        console.log('🔌 Realtime подписка закрыта');
+        onStatusChange?.(false);
       } else {
-        console.log('ℹ️ Статус подписки:', status, err ? `Ошибка: ${err}` : '');
+        console.log('🔄 Статус Realtime:', status);
       }
     });
 
-  console.log('🔔 Подписка создана, ожидание подключения...');
-
-  // Возвращаем функцию для отписки
   return () => {
-    console.log('🔕 Отписка от изменений данных, канал:', channelName);
-    supabase.removeChannel(channel).then(() => {
-      console.log('✅ Канал удален:', channelName);
-    });
+    console.log('🔌 Отключение Realtime подписки...', { channelName });
+    supabase.removeChannel(channel);
   };
 };
