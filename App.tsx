@@ -1158,17 +1158,6 @@ const TargetologistWorkspace: React.FC<{
 
   return (
     <div className="space-y-8 pb-20">
-      {/* Кнопка перехода к сводной таблице связок */}
-      <div className="flex justify-end">
-        <button
-          onClick={() => setShowBundlesSummary(true)}
-          className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-medium rounded-lg transition-all flex items-center gap-2 shadow-lg shadow-amber-500/20"
-        >
-          <BarChart3 size={18} />
-          Сводная таблица связок
-        </button>
-      </div>
-
        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <StatCard 
           title="Мой план" 
@@ -1305,6 +1294,17 @@ const TargetologistWorkspace: React.FC<{
           </table>
         </div>
       </GlassCard>
+
+      {/* Кнопка перехода к сводной таблице связок */}
+      <div className="flex justify-center">
+        <button
+          onClick={() => setShowBundlesSummary(true)}
+          className="px-6 py-3 bg-amber-600 hover:bg-amber-500 text-white font-medium rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-amber-500/20"
+        >
+          <BarChart3 size={20} />
+          Открыть сводную таблицу связок
+        </button>
+      </div>
 
     </div>
   );
