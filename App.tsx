@@ -375,6 +375,87 @@ const AdminDashboard: React.FC<{
     });
   }, [data, currentMonth, sortConfig]);
 
+  // --- Месячная динамика таргетологов ---
+  const monthlyDynamicsData = useMemo(() => {
+    // Получаем все дни текущего календарного месяца
+    const year = currentMonth.year;
+    const month = currentMonth.id; // 0-indexed
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    
+    const monthDays: string[] = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+      const date = new Date(year, month, d);
+      monthDays.push(date.toISOString().split('T')[0]);
+    }
+
+    const rows = Object.entries(data).map(([name, userData]) => {
+      let monthFact = 0, monthPlan = 0, monthBudget = 0, monthSpend = 0;
+      const dailyFacts: (number | string)[] = monthDays.map(() => 0);
+
+      (userData as UserData).projects.forEach(p => {
+        // Daily leads for the month
+        monthDays.forEach((d, idx) => {
+          const val = p.leads[d];
+          if (val === NO_BUDGET_VALUE) {
+            dailyFacts[idx] = dailyFacts[idx] === 0 ? 'н' : dailyFacts[idx];
+          } else if (val !== undefined && val !== NO_BUDGET_VALUE) {
+            if (dailyFacts[idx] !== 'н') {
+              dailyFacts[idx] = (dailyFacts[idx] as number) + val;
+            }
+            monthFact += val;
+          }
+        });
+
+        // Sum weekly stats for all weeks in the month
+        getMondaysInMonth(year, month).forEach(monday => {
+          const wStats = p.weeks[monday] || { goal: p.defaultGoal, budget: p.defaultBudget, spend: 0 };
+          monthPlan += (wStats.goal || 0);
+          monthBudget += (wStats.budget || 0);
+          monthSpend += (wStats.spend || 0);
+        });
+      });
+
+      const monthCPL = monthFact > 0 ? monthSpend / monthFact : 0;
+      const planPercent = monthPlan > 0 ? (monthFact / monthPlan) * 100 : 0;
+
+      return {
+        name,
+        dailyFacts,
+        monthFact,
+        monthPlan,
+        monthBudget,
+        monthSpend,
+        monthCPL,
+        planPercent
+      };
+    }).sort((a, b) => b.monthFact - a.monthFact);
+
+    // Totals
+    const totals = rows.reduce((acc, row) => ({
+      dailyFacts: acc.dailyFacts.map((v, i) => {
+        const rowVal = row.dailyFacts[i];
+        if (rowVal === 'н') return v === 0 ? 'н' : v;
+        if (v === 'н') return v;
+        return (v as number) + (rowVal as number);
+      }),
+      monthFact: acc.monthFact + row.monthFact,
+      monthPlan: acc.monthPlan + row.monthPlan,
+      monthBudget: acc.monthBudget + row.monthBudget,
+      monthSpend: acc.monthSpend + row.monthSpend,
+    }), { 
+      dailyFacts: monthDays.map(() => 0) as (number | string)[], 
+      monthFact: 0, 
+      monthPlan: 0, 
+      monthBudget: 0,
+      monthSpend: 0
+    });
+
+    const totalsCPL = totals.monthFact > 0 ? totals.monthSpend / totals.monthFact : 0;
+    const totalsPlanPercent = totals.monthPlan > 0 ? (totals.monthFact / totals.monthPlan) * 100 : 0;
+
+    return { rows, totals: { ...totals, monthCPL: totalsCPL, planPercent: totalsPlanPercent }, monthDays, daysInMonth };
+  }, [data, currentMonth]);
+
   // --- Сводная таблица связок ---
   const bundlesSummary = useMemo(() => {
     // Собираем все связки от всех таргетологов
@@ -669,6 +750,87 @@ const AdminDashboard: React.FC<{
                   </tr>
                 ))}
             </tbody>
+          </table>
+        </div>
+      </GlassCard>
+
+      {/* Месячная динамика таргетологов */}
+      <GlassCard className="overflow-hidden">
+        <div className="p-4 border-b border-white/5 bg-white/5 flex justify-between items-center">
+          <h3 className="text-lg font-bold text-white flex items-center gap-2">
+            <Calendar className="text-blue-400" size={18} />
+            Динамика месяца (Таргетологи)
+          </h3>
+          <span className="text-xs text-gray-400 bg-black/20 px-2 py-1 rounded">
+            {MONTHS.find(m => m.id === currentMonth.id)?.name} {currentMonth.year}
+          </span>
+        </div>
+        <div className="table-scroll-container overflow-auto max-h-[500px]">
+          <table className="w-full text-xs text-left border-collapse mobile-table">
+            <thead className="bg-white/5 sticky top-0 z-10 text-gray-400 font-medium">
+              <tr>
+                <th className="p-1.5 md:p-2 border-b border-white/10 min-w-[80px] md:min-w-[120px] sticky-col bg-slate-900/95 backdrop-blur-sm">Таргетолог</th>
+                {monthlyDynamicsData.monthDays.map((date, i) => {
+                  const day = new Date(date).getDate();
+                  const isWeekend = [0, 6].includes(new Date(date).getDay());
+                  return (
+                    <th key={date} className={`p-1 text-center border-b border-white/10 min-w-[28px] ${isWeekend ? 'text-rose-400/70' : ''}`}>
+                      {day}
+                    </th>
+                  );
+                })}
+                <th className="p-1.5 md:p-2 text-center border-b border-white/10 bg-emerald-900/10 text-emerald-400 font-bold min-w-[50px] md:min-w-[70px]">Факт</th>
+                <th className="p-1.5 md:p-2 text-center border-b border-white/10 min-w-[50px] md:min-w-[70px]">План</th>
+                <th className="p-1.5 md:p-2 text-center border-b border-white/10 bg-gray-800/50 min-w-[70px] md:min-w-[100px]">Бюджет</th>
+                <th className="p-1.5 md:p-2 text-center border-b border-white/10 min-w-[70px] md:min-w-[100px]">Расход</th>
+                <th className="p-1.5 md:p-2 text-center border-b border-white/10 min-w-[50px] md:min-w-[70px]">CPL</th>
+                <th className="p-1.5 md:p-2 text-center border-b border-white/10 min-w-[50px] md:min-w-[70px]">План %</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {monthlyDynamicsData.rows.map((row, rowIdx) => (
+                <tr key={row.name} className={`${rowIdx % 2 === 0 ? 'bg-slate-900/40' : 'bg-slate-800/40'} hover:bg-white/5 transition-colors`}>
+                  <td className={`p-1.5 md:p-2 font-medium text-white min-w-[80px] md:min-w-[120px] sticky-col ${rowIdx % 2 === 0 ? 'bg-slate-900/95' : 'bg-slate-800/95'} backdrop-blur-sm`}>{row.name}</td>
+                  {row.dailyFacts.map((v, i) => {
+                    const isWeekend = [0, 6].includes(new Date(monthlyDynamicsData.monthDays[i]).getDay());
+                    return (
+                      <td key={i} className={`p-1 text-center text-[10px] ${v === 'н' ? 'bg-rose-500/20 text-rose-400 font-bold' : v === 0 ? 'text-gray-600' : 'text-gray-300'} ${isWeekend ? 'bg-white/[0.02]' : ''}`}>
+                        {v === 0 ? '·' : v}
+                      </td>
+                    );
+                  })}
+                  <td className="p-1.5 md:p-2 text-center font-bold text-emerald-400 bg-emerald-900/10 border-l border-r border-white/5">{row.monthFact}</td>
+                  <td className="p-1.5 md:p-2 text-center text-gray-400">{row.monthPlan}</td>
+                  <td className="p-1.5 md:p-2 text-center text-gray-300 bg-gray-800/30">{row.monthBudget.toLocaleString()}</td>
+                  <td className="p-1.5 md:p-2 text-center text-white">{row.monthSpend.toLocaleString()}</td>
+                  <td className="p-1.5 md:p-2 text-center font-medium">{row.monthCPL > 0 ? row.monthCPL.toFixed(0) + ' ₽' : '—'}</td>
+                  <td className={`p-1.5 md:p-2 text-center font-bold ${row.planPercent >= 100 ? 'text-emerald-400' : row.planPercent >= 70 ? 'text-blue-400' : 'text-amber-400'}`}>
+                    {row.planPercent.toFixed(0)}%
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="bg-indigo-900/30 font-bold text-white border-t-2 border-indigo-500/50 sticky bottom-0">
+              <tr>
+                <td className="p-1.5 md:p-2 sticky-col bg-indigo-900/80 backdrop-blur-sm">ИТОГО</td>
+                {monthlyDynamicsData.totals.dailyFacts.map((v, i) => {
+                  const isWeekend = [0, 6].includes(new Date(monthlyDynamicsData.monthDays[i]).getDay());
+                  return (
+                    <td key={i} className={`p-1 text-center text-[10px] ${v === 'н' ? 'text-rose-400' : v === 0 ? 'text-gray-500' : 'text-indigo-200'} ${isWeekend ? 'bg-indigo-900/20' : ''}`}>
+                      {v === 0 ? '·' : v}
+                    </td>
+                  );
+                })}
+                <td className="p-1.5 md:p-2 text-center text-emerald-300 bg-emerald-900/20 text-base">{monthlyDynamicsData.totals.monthFact}</td>
+                <td className="p-1.5 md:p-2 text-center text-gray-300">{monthlyDynamicsData.totals.monthPlan}</td>
+                <td className="p-1.5 md:p-2 text-center text-gray-200 bg-gray-800/30">{monthlyDynamicsData.totals.monthBudget.toLocaleString()}</td>
+                <td className="p-1.5 md:p-2 text-center text-white">{monthlyDynamicsData.totals.monthSpend.toLocaleString()}</td>
+                <td className="p-1.5 md:p-2 text-center">{monthlyDynamicsData.totals.monthCPL > 0 ? monthlyDynamicsData.totals.monthCPL.toFixed(0) + ' ₽' : '—'}</td>
+                <td className={`p-1.5 md:p-2 text-center ${monthlyDynamicsData.totals.planPercent >= 100 ? 'text-emerald-400' : monthlyDynamicsData.totals.planPercent >= 70 ? 'text-blue-400' : 'text-amber-400'}`}>
+                  {monthlyDynamicsData.totals.planPercent.toFixed(0)}%
+                </td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </GlassCard>
