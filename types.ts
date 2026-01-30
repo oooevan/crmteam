@@ -16,6 +16,7 @@ export interface WeeklyStats {
   spend: number;
   goal: number;
   targetCpa: number;
+  bundles?: BundleEntry[]; // Связки за эту неделю (до 4 штук)
 }
 
 export interface Project {

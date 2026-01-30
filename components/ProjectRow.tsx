@@ -29,7 +29,8 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({
     budget: project.defaultBudget,
     spend: 0,
     goal: project.defaultGoal,
-    targetCpa: project.defaultTargetCpa
+    targetCpa: project.defaultTargetCpa,
+    bundles: []
   };
 
   const weeklyLeadsCount = days.reduce((acc, date) => {
@@ -64,7 +65,7 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({
     });
   };
 
-  const handleStatChange = <K extends keyof WeeklyStats>(field: K, value: number) => {
+  const handleStatChange = <K extends keyof WeeklyStats>(field: K, value: WeeklyStats[K]) => {
     onUpdate(project.id, {
       ...project,
       weeks: {
@@ -111,6 +112,9 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({
     if (planPercent >= 40) return 'bg-amber-500';
     return 'bg-rose-500';
   };
+
+  // Связки текущей недели
+  const weekBundles = currentStats.bundles || [];
 
   return (
     <tr className={`${rowBgClass} hover:bg-white/[0.05] transition-colors group`}>
@@ -159,7 +163,7 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({
         <input 
           type="number" 
           value={currentStats.goal || ''} 
-          onChange={(e) => handleStatChange('goal', parseFloat(e.target.value))}
+          onChange={(e) => handleStatChange('goal', parseFloat(e.target.value) || 0)}
           disabled={!isPlanEditable}
           style={getInputWidth(currentStats.goal, 3)}
           className={`${inputClass} text-sm ${!isPlanEditable ? 'text-gray-600 cursor-not-allowed' : 'text-gray-400'}`}
@@ -188,7 +192,7 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({
           <input 
             type="number" 
             value={currentStats.budget || ''} 
-            onChange={(e) => handleStatChange('budget', parseFloat(e.target.value))}
+            onChange={(e) => handleStatChange('budget', parseFloat(e.target.value) || 0)}
             style={getInputWidth(currentStats.budget, 4)}
             className={`${inputClass} text-gray-400 text-sm`}
             placeholder="0"
@@ -203,7 +207,7 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({
           <input 
             type="number" 
             value={currentStats.spend || ''} 
-            onChange={(e) => handleStatChange('spend', parseFloat(e.target.value))}
+            onChange={(e) => handleStatChange('spend', parseFloat(e.target.value) || 0)}
             style={getInputWidth(currentStats.spend, 4)}
             className={`${inputClass} text-white text-sm`}
             placeholder="0"
@@ -228,7 +232,7 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({
           <input 
             type="number" 
             value={currentStats.targetCpa || ''} 
-            onChange={(e) => handleStatChange('targetCpa', parseFloat(e.target.value))}
+            onChange={(e) => handleStatChange('targetCpa', parseFloat(e.target.value) || 0)}
             style={getInputWidth(currentStats.targetCpa, 3)}
             className={`${inputClass} text-gray-400 text-sm`}
             placeholder="0"
@@ -237,9 +241,9 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({
         </div>
       </td>
 
-      {/* Связки - 4 пары */}
+      {/* Связки - 4 пары (сохраняются понедельно) */}
       {[0, 1, 2, 3].map((index) => {
-        const bundle = project.bundles?.[index];
+        const bundle = weekBundles[index];
         const isLastBundle = index === 3;
         return (
           <React.Fragment key={`bundle-${index}`}>
@@ -248,9 +252,10 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({
                 type="text"
                 value={bundle?.bundle || ''}
                 onChange={(e) => {
-                  const newBundles = [...(project.bundles || [])];
+                  const newBundles = [...weekBundles];
+                  while (newBundles.length <= index) newBundles.push({ bundle: '', unscrew: 0 });
                   newBundles[index] = { bundle: e.target.value, unscrew: bundle?.unscrew || 0 };
-                  onUpdate(project.id, { ...project, bundles: newBundles });
+                  handleStatChange('bundles', newBundles);
                 }}
                 style={getTextInputWidth(bundle?.bundle, 5)}
                 className={`${inputClass} text-indigo-300 text-sm`}
@@ -263,9 +268,10 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({
                   type="number"
                   value={bundle?.unscrew || ''}
                   onChange={(e) => {
-                    const newBundles = [...(project.bundles || [])];
+                    const newBundles = [...weekBundles];
+                    while (newBundles.length <= index) newBundles.push({ bundle: '', unscrew: 0 });
                     newBundles[index] = { bundle: bundle?.bundle || '', unscrew: parseFloat(e.target.value) || 0 };
-                    onUpdate(project.id, { ...project, bundles: newBundles });
+                    handleStatChange('bundles', newBundles);
                   }}
                   style={getInputWidth(bundle?.unscrew, 3)}
                   className={`${inputClass} text-indigo-300 text-sm`}

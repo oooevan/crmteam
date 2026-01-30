@@ -457,16 +457,18 @@ const AdminDashboard: React.FC<{
   }, [data, currentMonth]);
 
   // --- Сводная таблица связок ---
+  // Сводная таблица связок за текущую неделю
   const bundlesSummary = useMemo(() => {
-    // Собираем все связки от всех таргетологов
     const bundlesByName: Record<string, Record<string, number>> = {};
     const targetologists = Object.keys(data);
     
     Object.entries(data).forEach(([owner, userData]) => {
       const user = userData as UserData;
-      // Собираем связки из проектов
       user.projects?.forEach(project => {
-        project.bundles?.forEach(bundle => {
+        // Берём связки из текущей недели
+        const weekStats = project.weeks[weekStart];
+        const weekBundles = weekStats?.bundles || [];
+        weekBundles.forEach(bundle => {
           if (bundle.bundle && bundle.bundle.trim()) {
             const bundleName = bundle.bundle.trim();
             if (!bundlesByName[bundleName]) {
@@ -479,14 +481,48 @@ const AdminDashboard: React.FC<{
       });
     });
 
-    // Преобразуем в массив и сортируем по итого
     const rows = Object.entries(bundlesByName).map(([bundleName, values]) => {
       const total = Object.values(values).reduce((sum, v) => sum + v, 0);
       return { bundleName, values, total };
     }).sort((a, b) => b.total - a.total);
 
     return { rows, targetologists };
-  }, [data]);
+  }, [data, weekStart]);
+  
+  // Сводная таблица связок за месяц (топ-15)
+  const monthlyBundlesSummary = useMemo(() => {
+    const bundlesByName: Record<string, Record<string, number>> = {};
+    const targetologists = Object.keys(data);
+    const mondays = getMondaysInMonth(currentMonth.year, currentMonth.id);
+    
+    Object.entries(data).forEach(([owner, userData]) => {
+      const user = userData as UserData;
+      user.projects?.forEach(project => {
+        // Суммируем связки за все недели месяца
+        mondays.forEach(monday => {
+          const weekStats = project.weeks[monday];
+          const weekBundles = weekStats?.bundles || [];
+          weekBundles.forEach(bundle => {
+            if (bundle.bundle && bundle.bundle.trim()) {
+              const bundleName = bundle.bundle.trim();
+              if (!bundlesByName[bundleName]) {
+                bundlesByName[bundleName] = {};
+                targetologists.forEach(t => bundlesByName[bundleName][t] = 0);
+              }
+              bundlesByName[bundleName][owner] = (bundlesByName[bundleName][owner] || 0) + (bundle.unscrew || 0);
+            }
+          });
+        });
+      });
+    });
+
+    const rows = Object.entries(bundlesByName).map(([bundleName, values]) => {
+      const total = Object.values(values).reduce((sum, v) => sum + v, 0);
+      return { bundleName, values, total };
+    }).sort((a, b) => b.total - a.total).slice(0, 15); // Топ-15
+
+    return { rows, targetologists };
+  }, [data, currentMonth]);
 
   const handleUpdateMonthlyGoal = (owner: string, project: Project, newMonthlyGoal: number) => {
     console.log('📝 handleUpdateMonthlyGoal вызван:', { owner, projectId: project.id, newMonthlyGoal });
@@ -1058,16 +1094,22 @@ const TargetologistWorkspace: React.FC<{
 
   // Состояние для показа сводной таблицы связок
   const [showBundlesSummary, setShowBundlesSummary] = useState(false);
+  const [bundlesViewMode, setBundlesViewMode] = useState<'week' | 'month'>('week');
+  const [bundlesWeekIndex, setBundlesWeekIndex] = useState(WEEKS_LIST.findIndex(w => w.id === weekStart));
+  
+  const bundlesWeek = WEEKS_LIST[bundlesWeekIndex] || WEEKS_LIST[0];
 
-  // Расчёт сводной таблицы связок (из allData)
-  const bundlesSummaryForTargetologist = useMemo(() => {
+  // Расчёт сводной таблицы связок за неделю
+  const weeklyBundlesSummary = useMemo(() => {
     const bundlesByName: Record<string, Record<string, number>> = {};
     const targetologists = Object.keys(allData);
     
     Object.entries(allData).forEach(([owner, userData]) => {
       const user = userData as UserData;
       user.projects?.forEach(project => {
-        project.bundles?.forEach(bundle => {
+        const weekStats = project.weeks[bundlesWeek.id];
+        const weekBundles = weekStats?.bundles || [];
+        weekBundles.forEach(bundle => {
           if (bundle.bundle && bundle.bundle.trim()) {
             const bundleName = bundle.bundle.trim();
             if (!bundlesByName[bundleName]) {
@@ -1086,13 +1128,58 @@ const TargetologistWorkspace: React.FC<{
     }).sort((a, b) => b.total - a.total);
 
     return { rows, targetologists };
-  }, [allData]);
+  }, [allData, bundlesWeek.id]);
+
+  // Расчёт сводной таблицы связок за месяц (топ-15)
+  const monthlyBundlesSummaryForTargetologist = useMemo(() => {
+    const bundlesByName: Record<string, Record<string, number>> = {};
+    const targetologists = Object.keys(allData);
+    
+    // Определяем текущий месяц из bundlesWeek
+    const weekDate = new Date(bundlesWeek.id);
+    const year = weekDate.getFullYear();
+    const month = weekDate.getMonth();
+    const mondays = getMondaysInMonth(year, month);
+    
+    Object.entries(allData).forEach(([owner, userData]) => {
+      const user = userData as UserData;
+      user.projects?.forEach(project => {
+        mondays.forEach(monday => {
+          const weekStats = project.weeks[monday];
+          const weekBundles = weekStats?.bundles || [];
+          weekBundles.forEach(bundle => {
+            if (bundle.bundle && bundle.bundle.trim()) {
+              const bundleName = bundle.bundle.trim();
+              if (!bundlesByName[bundleName]) {
+                bundlesByName[bundleName] = {};
+                targetologists.forEach(t => bundlesByName[bundleName][t] = 0);
+              }
+              bundlesByName[bundleName][owner] = (bundlesByName[bundleName][owner] || 0) + (bundle.unscrew || 0);
+            }
+          });
+        });
+      });
+    });
+
+    const rows = Object.entries(bundlesByName).map(([bundleName, values]) => {
+      const total = Object.values(values).reduce((sum, v) => sum + v, 0);
+      return { bundleName, values, total };
+    }).sort((a, b) => b.total - a.total).slice(0, 15);
+
+    // Определяем название месяца
+    const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+    const monthLabel = `${monthNames[month]} ${year}`;
+
+    return { rows, targetologists, monthLabel };
+  }, [allData, bundlesWeek.id]);
+
+  const currentBundlesSummary = bundlesViewMode === 'week' ? weeklyBundlesSummary : monthlyBundlesSummaryForTargetologist;
 
   // Если показываем сводную таблицу связок
   if (showBundlesSummary) {
     return (
       <div className="space-y-6 pb-20">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <h2 className="text-2xl font-bold text-white flex items-center gap-3">
             <BarChart3 className="text-amber-400" />
             Сводная таблица связок
@@ -1106,13 +1193,68 @@ const TargetologistWorkspace: React.FC<{
           </button>
         </div>
 
+        {/* Переключатель неделя/месяц */}
+        <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setBundlesViewMode('week')}
+              className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                bundlesViewMode === 'week'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-white/5 text-gray-400 hover:bg-white/10'
+              }`}
+            >
+              За неделю
+            </button>
+            <button
+              onClick={() => setBundlesViewMode('month')}
+              className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                bundlesViewMode === 'month'
+                  ? 'bg-amber-600 text-white'
+                  : 'bg-white/5 text-gray-400 hover:bg-white/10'
+              }`}
+            >
+              За месяц (Топ-15)
+            </button>
+          </div>
+
+          {/* Переключатель недель (только в режиме недели) */}
+          {bundlesViewMode === 'week' && (
+            <div className="flex items-center gap-2 bg-black/40 rounded-lg border border-white/10 p-1">
+              <button 
+                onClick={() => setBundlesWeekIndex(Math.max(0, bundlesWeekIndex - 1))}
+                disabled={bundlesWeekIndex === 0}
+                className="p-2 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <div className="px-4 text-sm font-bold text-white min-w-[140px] text-center">
+                {bundlesWeek.label}
+              </div>
+              <button 
+                onClick={() => setBundlesWeekIndex(Math.min(WEEKS_LIST.length - 1, bundlesWeekIndex + 1))}
+                disabled={bundlesWeekIndex === WEEKS_LIST.length - 1}
+                className="p-2 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          )}
+
+          {bundlesViewMode === 'month' && (
+            <div className="px-4 py-2 bg-amber-900/30 border border-amber-500/30 rounded-lg text-amber-300 font-medium">
+              {monthlyBundlesSummaryForTargetologist.monthLabel}
+            </div>
+          )}
+        </div>
+
         <GlassCard className="overflow-hidden">
           <div className="table-scroll-container overflow-auto">
             <table className="w-full text-sm text-left border-collapse">
               <thead className="bg-white/5 sticky top-0 z-10 text-gray-400 font-medium uppercase text-xs">
                 <tr>
                   <th className="p-3 md:p-4 border-b border-white/10 min-w-[120px] sticky-col bg-slate-900/95 backdrop-blur-sm">Связка</th>
-                  {bundlesSummaryForTargetologist.targetologists.map(t => (
+                  {currentBundlesSummary.targetologists.map(t => (
                     <th key={t} className={`p-3 md:p-4 text-center border-b border-white/10 min-w-[80px] ${t === name ? 'bg-indigo-900/30 text-indigo-300' : ''}`}>
                       {t}
                     </th>
@@ -1121,34 +1263,47 @@ const TargetologistWorkspace: React.FC<{
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {bundlesSummaryForTargetologist.rows.map(({ bundleName, values, total }, rowIdx) => (
-                  <tr key={bundleName} className={`${rowIdx % 2 === 0 ? 'bg-slate-900/40' : 'bg-slate-800/40'} hover:bg-white/[0.05] transition-colors`}>
-                    <td className={`p-3 md:p-4 font-bold text-white sticky-col ${rowIdx % 2 === 0 ? 'bg-slate-900/95' : 'bg-slate-800/95'} backdrop-blur-sm`}>{bundleName}</td>
-                    {bundlesSummaryForTargetologist.targetologists.map(t => (
-                      <td key={t} className={`p-3 md:p-4 text-center ${values[t] > 0 ? 'text-white' : 'text-gray-600'} ${t === name ? 'bg-indigo-900/20 font-bold text-indigo-300' : ''}`}>
-                        {values[t] > 0 ? values[t].toLocaleString() + ' ₽' : '0'}
-                      </td>
-                    ))}
-                    <td className="p-3 md:p-4 text-center font-bold text-emerald-400 bg-emerald-900/10">{total.toLocaleString()} ₽</td>
+                {currentBundlesSummary.rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={currentBundlesSummary.targetologists.length + 2} className="p-8 text-center text-gray-500">
+                      Нет данных по связкам за этот период
+                    </td>
                   </tr>
-                ))}
-              </tbody>
-              <tfoot className="bg-indigo-900/30 font-bold text-white border-t-2 border-indigo-500/50 sticky bottom-0">
-                <tr>
-                  <td className="p-3 md:p-4 sticky-col bg-indigo-900/80 backdrop-blur-sm">ИТОГО</td>
-                  {bundlesSummaryForTargetologist.targetologists.map(t => {
-                    const userTotal = bundlesSummaryForTargetologist.rows.reduce((sum, row) => sum + (row.values[t] || 0), 0);
-                    return (
-                      <td key={t} className={`p-3 md:p-4 text-center ${t === name ? 'bg-indigo-900/40 text-indigo-200' : ''}`}>
-                        {userTotal.toLocaleString()} ₽
+                ) : (
+                  currentBundlesSummary.rows.map(({ bundleName, values, total }, rowIdx) => (
+                    <tr key={bundleName} className={`${rowIdx % 2 === 0 ? 'bg-slate-900/40' : 'bg-slate-800/40'} hover:bg-white/[0.05] transition-colors`}>
+                      <td className={`p-3 md:p-4 font-bold text-white sticky-col ${rowIdx % 2 === 0 ? 'bg-slate-900/95' : 'bg-slate-800/95'} backdrop-blur-sm`}>
+                        {bundlesViewMode === 'month' && <span className="text-amber-400 mr-2">#{rowIdx + 1}</span>}
+                        {bundleName}
                       </td>
-                    );
-                  })}
-                  <td className="p-3 md:p-4 text-center text-emerald-300 bg-emerald-900/30">
-                    {bundlesSummaryForTargetologist.rows.reduce((sum, row) => sum + row.total, 0).toLocaleString()} ₽
-                  </td>
-                </tr>
-              </tfoot>
+                      {currentBundlesSummary.targetologists.map(t => (
+                        <td key={t} className={`p-3 md:p-4 text-center ${values[t] > 0 ? 'text-white' : 'text-gray-600'} ${t === name ? 'bg-indigo-900/20 font-bold text-indigo-300' : ''}`}>
+                          {values[t] > 0 ? values[t].toLocaleString() + ' ₽' : '0'}
+                        </td>
+                      ))}
+                      <td className="p-3 md:p-4 text-center font-bold text-emerald-400 bg-emerald-900/10">{total.toLocaleString()} ₽</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+              {currentBundlesSummary.rows.length > 0 && (
+                <tfoot className="bg-indigo-900/30 font-bold text-white border-t-2 border-indigo-500/50 sticky bottom-0">
+                  <tr>
+                    <td className="p-3 md:p-4 sticky-col bg-indigo-900/80 backdrop-blur-sm">ИТОГО</td>
+                    {currentBundlesSummary.targetologists.map(t => {
+                      const userTotal = currentBundlesSummary.rows.reduce((sum, row) => sum + (row.values[t] || 0), 0);
+                      return (
+                        <td key={t} className={`p-3 md:p-4 text-center ${t === name ? 'bg-indigo-900/40 text-indigo-200' : ''}`}>
+                          {userTotal.toLocaleString()} ₽
+                        </td>
+                      );
+                    })}
+                    <td className="p-3 md:p-4 text-center text-emerald-300 bg-emerald-900/30">
+                      {currentBundlesSummary.rows.reduce((sum, row) => sum + row.total, 0).toLocaleString()} ₽
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </GlassCard>
