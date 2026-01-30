@@ -1056,8 +1056,119 @@ const TargetologistWorkspace: React.FC<{
   // Список возможных связок
   const availableBundles = ['Т1', 'Т2', 'Т3', 'Т4', 'Т5', 'Т6', 'Т7', 'Т8', 'Т9', 'Т10'];
 
+  // Состояние для показа сводной таблицы связок
+  const [showBundlesSummary, setShowBundlesSummary] = useState(false);
+
+  // Расчёт сводной таблицы связок (из allData)
+  const bundlesSummaryForTargetologist = useMemo(() => {
+    const bundlesByName: Record<string, Record<string, number>> = {};
+    const targetologists = Object.keys(allData);
+    
+    Object.entries(allData).forEach(([owner, userData]) => {
+      const user = userData as UserData;
+      user.projects?.forEach(project => {
+        project.bundles?.forEach(bundle => {
+          if (bundle.bundle && bundle.bundle.trim()) {
+            const bundleName = bundle.bundle.trim();
+            if (!bundlesByName[bundleName]) {
+              bundlesByName[bundleName] = {};
+              targetologists.forEach(t => bundlesByName[bundleName][t] = 0);
+            }
+            bundlesByName[bundleName][owner] = (bundlesByName[bundleName][owner] || 0) + (bundle.unscrew || 0);
+          }
+        });
+      });
+    });
+
+    const rows = Object.entries(bundlesByName).map(([bundleName, values]) => {
+      const total = Object.values(values).reduce((sum, v) => sum + v, 0);
+      return { bundleName, values, total };
+    }).sort((a, b) => b.total - a.total);
+
+    return { rows, targetologists };
+  }, [allData]);
+
+  // Если показываем сводную таблицу связок
+  if (showBundlesSummary) {
+    return (
+      <div className="space-y-6 pb-20">
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+            <BarChart3 className="text-amber-400" />
+            Сводная таблица связок
+          </h2>
+          <button
+            onClick={() => setShowBundlesSummary(false)}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg transition-all flex items-center gap-2"
+          >
+            <ChevronLeft size={18} />
+            Назад к таблице
+          </button>
+        </div>
+
+        <GlassCard className="overflow-hidden">
+          <div className="table-scroll-container overflow-auto">
+            <table className="w-full text-sm text-left border-collapse">
+              <thead className="bg-white/5 sticky top-0 z-10 text-gray-400 font-medium uppercase text-xs">
+                <tr>
+                  <th className="p-3 md:p-4 border-b border-white/10 min-w-[120px] sticky-col bg-slate-900/95 backdrop-blur-sm">Связка</th>
+                  {bundlesSummaryForTargetologist.targetologists.map(t => (
+                    <th key={t} className={`p-3 md:p-4 text-center border-b border-white/10 min-w-[80px] ${t === name ? 'bg-indigo-900/30 text-indigo-300' : ''}`}>
+                      {t}
+                    </th>
+                  ))}
+                  <th className="p-3 md:p-4 text-center border-b border-white/10 bg-emerald-900/20 text-emerald-400 font-bold min-w-[100px]">ИТОГО</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {bundlesSummaryForTargetologist.rows.map(({ bundleName, values, total }, rowIdx) => (
+                  <tr key={bundleName} className={`${rowIdx % 2 === 0 ? 'bg-slate-900/40' : 'bg-slate-800/40'} hover:bg-white/[0.05] transition-colors`}>
+                    <td className={`p-3 md:p-4 font-bold text-white sticky-col ${rowIdx % 2 === 0 ? 'bg-slate-900/95' : 'bg-slate-800/95'} backdrop-blur-sm`}>{bundleName}</td>
+                    {bundlesSummaryForTargetologist.targetologists.map(t => (
+                      <td key={t} className={`p-3 md:p-4 text-center ${values[t] > 0 ? 'text-white' : 'text-gray-600'} ${t === name ? 'bg-indigo-900/20 font-bold text-indigo-300' : ''}`}>
+                        {values[t] > 0 ? values[t].toLocaleString() + ' ₽' : '0'}
+                      </td>
+                    ))}
+                    <td className="p-3 md:p-4 text-center font-bold text-emerald-400 bg-emerald-900/10">{total.toLocaleString()} ₽</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-indigo-900/30 font-bold text-white border-t-2 border-indigo-500/50 sticky bottom-0">
+                <tr>
+                  <td className="p-3 md:p-4 sticky-col bg-indigo-900/80 backdrop-blur-sm">ИТОГО</td>
+                  {bundlesSummaryForTargetologist.targetologists.map(t => {
+                    const userTotal = bundlesSummaryForTargetologist.rows.reduce((sum, row) => sum + (row.values[t] || 0), 0);
+                    return (
+                      <td key={t} className={`p-3 md:p-4 text-center ${t === name ? 'bg-indigo-900/40 text-indigo-200' : ''}`}>
+                        {userTotal.toLocaleString()} ₽
+                      </td>
+                    );
+                  })}
+                  <td className="p-3 md:p-4 text-center text-emerald-300 bg-emerald-900/30">
+                    {bundlesSummaryForTargetologist.rows.reduce((sum, row) => sum + row.total, 0).toLocaleString()} ₽
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </GlassCard>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 pb-20">
+      {/* Кнопка перехода к сводной таблице связок */}
+      <div className="flex justify-end">
+        <button
+          onClick={() => setShowBundlesSummary(true)}
+          className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-medium rounded-lg transition-all flex items-center gap-2 shadow-lg shadow-amber-500/20"
+        >
+          <BarChart3 size={18} />
+          Сводная таблица связок
+        </button>
+      </div>
+
        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <StatCard 
           title="Мой план" 
