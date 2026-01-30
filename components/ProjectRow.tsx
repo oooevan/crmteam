@@ -112,12 +112,6 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({
     return 'bg-rose-500';
   };
 
-  // Форматирование числа с символом рубля
-  const formatRubleValue = (value: number | undefined): string => {
-    if (!value) return '';
-    return value.toString();
-  };
-
   return (
     <tr className={`${rowBgClass} hover:bg-white/[0.05] transition-colors group`}>
       {ownerName && (
@@ -220,21 +214,27 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({
 
       {/* CPL */}
       <td className={`${cellClass} text-center`}>
-        <span className={`font-medium text-sm ${cpaColor}`}>
-          {currentStats.spend > 0 && weeklyLeadsCount === 0 ? '∞' : weeklyLeadsCount > 0 ? actualCpa.toFixed(0) : '0'}
-        </span>
+        <div className="flex items-center justify-center gap-0.5">
+          <span className={`font-medium text-sm ${cpaColor}`}>
+            {currentStats.spend > 0 && weeklyLeadsCount === 0 ? '∞' : weeklyLeadsCount > 0 ? actualCpa.toFixed(0) : '0'}
+          </span>
+          {weeklyLeadsCount > 0 && actualCpa > 0 && <span className={`text-xs opacity-70 ${cpaColor}`}>₽</span>}
+        </div>
       </td>
 
       {/* KPI - с жирным разделителем справа */}
       <td className={`${cellClass} border-r-2 border-r-white/20`}>
-        <input 
-          type="number" 
-          value={currentStats.targetCpa || ''} 
-          onChange={(e) => handleStatChange('targetCpa', parseFloat(e.target.value))}
-          style={getInputWidth(currentStats.targetCpa, 3)}
-          className={`${inputClass} text-gray-400 text-sm`}
-          placeholder="₽"
-        />
+        <div className="flex items-center justify-center gap-0.5">
+          <input 
+            type="number" 
+            value={currentStats.targetCpa || ''} 
+            onChange={(e) => handleStatChange('targetCpa', parseFloat(e.target.value))}
+            style={getInputWidth(currentStats.targetCpa, 3)}
+            className={`${inputClass} text-gray-400 text-sm`}
+            placeholder="0"
+          />
+          {currentStats.targetCpa > 0 && <span className="text-gray-500 text-xs">₽</span>}
+        </div>
       </td>
 
       {/* Связки - 4 пары */}
