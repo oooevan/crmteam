@@ -1121,12 +1121,21 @@ const TargetologistWorkspace: React.FC<{
   const weeklyBundlesSummary = useMemo(() => {
     const bundlesByName: Record<string, Record<string, number>> = {};
     const targetologists = Object.keys(allData);
+    const weekDays = getWeekDays(new Date(bundlesWeek.id)).map(d => d.iso);
+    
+    console.log('📊 Недельная сводка связок:', { 
+      week: bundlesWeek.label, 
+      weekId: bundlesWeek.id,
+      targetologists: targetologists.length 
+    });
     
     Object.entries(allData).forEach(([owner, userData]) => {
       const user = userData as UserData;
       user.projects?.forEach(project => {
         const weekStats = project.weeks[bundlesWeek.id];
         const weekBundles = weekStats?.bundles || [];
+        
+        // Новый формат - связки в weeks[weekId].bundles
         weekBundles.forEach(bundle => {
           if (bundle.bundle && bundle.bundle.trim()) {
             const bundleName = bundle.bundle.trim();
@@ -1137,6 +1146,28 @@ const TargetologistWorkspace: React.FC<{
             bundlesByName[bundleName][owner] = (bundlesByName[bundleName][owner] || 0) + (bundle.unscrew || 0);
           }
         });
+        
+        // Старый формат - связки в project.bundles (fallback)
+        if (project.bundles && project.bundles.length > 0 && weekBundles.length === 0) {
+          // Проверяем, есть ли у проекта лиды в эту неделю
+          const hasLeadsThisWeek = weekDays.some(day => {
+            const val = project.leads[day];
+            return val !== undefined && val !== 0;
+          });
+          
+          if (hasLeadsThisWeek) {
+            project.bundles.forEach(bundle => {
+              if (bundle.bundle && bundle.bundle.trim()) {
+                const bundleName = bundle.bundle.trim();
+                if (!bundlesByName[bundleName]) {
+                  bundlesByName[bundleName] = {};
+                  targetologists.forEach(t => bundlesByName[bundleName][t] = 0);
+                }
+                bundlesByName[bundleName][owner] = (bundlesByName[bundleName][owner] || 0) + (bundle.unscrew || 0);
+              }
+            });
+          }
+        }
       });
     });
 
@@ -1144,6 +1175,8 @@ const TargetologistWorkspace: React.FC<{
       const total = Object.values(values).reduce((sum, v) => sum + v, 0);
       return { bundleName, values, total };
     }).sort((a, b) => b.total - a.total);
+    
+    console.log('📊 Найдено связок за неделю:', rows.length);
 
     return { rows, targetologists };
   }, [allData, bundlesWeek.id]);
@@ -1155,13 +1188,20 @@ const TargetologistWorkspace: React.FC<{
     
     // Используем выбранный месяц
     const mondays = getMondaysInMonth(bundlesMonth.monthYear, bundlesMonth.month);
+    console.log('📊 Месячная сводка связок:', { 
+      month: bundlesMonth.label, 
+      mondays,
+      targetologists: targetologists.length 
+    });
     
     Object.entries(allData).forEach(([owner, userData]) => {
       const user = userData as UserData;
       user.projects?.forEach(project => {
+        // Проверяем связки за каждую неделю месяца
         mondays.forEach(monday => {
           const weekStats = project.weeks[monday];
           const weekBundles = weekStats?.bundles || [];
+          
           weekBundles.forEach(bundle => {
             if (bundle.bundle && bundle.bundle.trim()) {
               const bundleName = bundle.bundle.trim();
@@ -1173,6 +1213,36 @@ const TargetologistWorkspace: React.FC<{
             }
           });
         });
+        
+        // Также проверяем старый формат project.bundles (для совместимости с историческими данными)
+        // Но только если нет данных в новом формате за этот месяц
+        if (project.bundles && project.bundles.length > 0) {
+          // Проверяем, есть ли у проекта лиды в этом месяце (чтобы связать старые связки с месяцем)
+          const hasLeadsInMonth = Object.keys(project.leads || {}).some(dateStr => {
+            const d = new Date(dateStr);
+            return d.getFullYear() === bundlesMonth.monthYear && d.getMonth() === bundlesMonth.month;
+          });
+          
+          // Проверяем, есть ли уже данные за этот месяц в новом формате
+          const hasNewFormatData = mondays.some(monday => {
+            const weekStats = project.weeks[monday];
+            return weekStats?.bundles && weekStats.bundles.length > 0;
+          });
+          
+          // Добавляем старые связки только если они относятся к этому месяцу и нет новых данных
+          if (hasLeadsInMonth && !hasNewFormatData) {
+            project.bundles.forEach(bundle => {
+              if (bundle.bundle && bundle.bundle.trim()) {
+                const bundleName = bundle.bundle.trim();
+                if (!bundlesByName[bundleName]) {
+                  bundlesByName[bundleName] = {};
+                  targetologists.forEach(t => bundlesByName[bundleName][t] = 0);
+                }
+                bundlesByName[bundleName][owner] = (bundlesByName[bundleName][owner] || 0) + (bundle.unscrew || 0);
+              }
+            });
+          }
+        }
       });
     });
 
@@ -1180,6 +1250,8 @@ const TargetologistWorkspace: React.FC<{
       const total = Object.values(values).reduce((sum, v) => sum + v, 0);
       return { bundleName, values, total };
     }).sort((a, b) => b.total - a.total).slice(0, 15);
+    
+    console.log('📊 Найдено связок:', rows.length);
 
     return { rows, targetologists, monthLabel: bundlesMonth.label };
   }, [allData, bundlesMonth]);
